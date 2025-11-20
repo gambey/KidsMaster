@@ -3,22 +3,60 @@
 		<view class="header">
 			<text class="title">🎮 游戏</text>
 		</view>
-		<view class="content">
-			<text class="placeholder">游戏中心</text>
-			<text class="subtitle">这里将展示各种有趣的游戏</text>
-		</view>
+		<scroll-view class="game-list" scroll-y="true">
+			<view class="game-row" v-for="(row, rowIndex) in gameRows" :key="rowIndex">
+				<view 
+					class="game-card" 
+					v-for="(game, index) in row" 
+					:key="index"
+					@click="goToGameDetail(game)"
+				>
+					<view class="card-cover">
+						<text class="cover-emoji">{{ game.emoji }}</text>
+					</view>
+					<text class="card-title">{{ game.name }}</text>
+				</view>
+			</view>
+		</scroll-view>
 	</view>
 </template>
 
 <script lang="uts">
+	type GameItem = {
+		id: string
+		name: string
+		emoji: string
+		description: string
+	}
+	
 	export default {
 		data() {
+			const games: GameItem[] = [
+				{ id: "1", name: "舒尔特方格", emoji: "🧩", description: "快速寻找到数字，提升专注能力" },
+				{ id: "2", name: "颜色匹配", emoji: "🎨", description: "匹配相同颜色，提升观察能力" },
+				{ id: "3", name: "字母冒险", emoji: "🔤", description: "在冒险中学习字母，寓教于乐" },
+				{ id: "4", name: "形状识别", emoji: "⭐", description: "认识各种形状，开发空间想象力" },
+				{ id: "5", name: "记忆挑战", emoji: "🧠", description: "挑战记忆力，锻炼大脑" },
+				{ id: "6", name: "音乐节奏", emoji: "🎵", description: "跟随节奏，培养音乐感" }
+			]
+			const rows: GameItem[][] = []
+			for (let i = 0; i < games.length; i += 2) {
+				rows.push(games.slice(i, i + 2))
+			}
 			return {
-				
+				games: games,
+				gameRows: rows
 			}
 		},
 		onLoad() {
 			
+		},
+		methods: {
+			goToGameDetail(game: GameItem) {
+				uni.navigateTo({
+					url: `/pages/game/detail/detail?id=${game.id}&name=${encodeURIComponent(game.name)}&emoji=${encodeURIComponent(game.emoji)}&description=${encodeURIComponent(game.description)}`
+				})
+			}
 		}
 	}
 </script>
@@ -43,24 +81,53 @@
 		text-shadow: 2px 2px 0px #FFFFFF, 4px 4px 0px rgba(0,0,0,0.1);
 	}
 	
-	.content {
+	.game-list {
 		flex: 1;
-		justify-content: center;
+		margin-top: 20px;
+	}
+	
+	.game-row {
+		flex-direction: row;
+		justify-content: space-between;
+		margin-bottom: 20px;
+		padding: 0 5px;
+	}
+	
+	.game-card {
+		width: 48%;
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 20px;
+		border: 4px solid #FFFFFF;
+		box-shadow: 0px 6px 0px rgba(0,0,0,0.15), 0px 3px 0px rgba(0,0,0,0.1);
+		padding: 15px;
 		align-items: center;
-		padding: 20px;
 	}
 	
-	.placeholder {
-		font-size: 24px;
-		color: #FF6B6B;
-		font-weight: bold;
-		margin-bottom: 15px;
-		text-align: center;
+	.game-card:active {
+		transform: translateY(2px);
+		box-shadow: 0px 3px 0px rgba(0,0,0,0.1), 0px 1px 0px rgba(0,0,0,0.05);
 	}
 	
-	.subtitle {
+	.card-cover {
+		width: 100%;
+		height: 140px;
+		background: linear-gradient(135deg, #FFE5B4 0%, #FFCCCB 100%);
+		border-radius: 15px;
+		border: 3px solid #FFFFFF;
+		align-items: center;
+		justify-content: center;
+		margin-bottom: 12px;
+	}
+	
+	.cover-emoji {
+		font-size: 70px;
+	}
+	
+	.card-title {
 		font-size: 18px;
-		color: #95E1D3;
+		font-weight: bold;
+		color: #4ECDC4;
 		text-align: center;
+		text-shadow: 1px 1px 0px #FFFFFF;
 	}
 </style>
