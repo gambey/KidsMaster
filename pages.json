@@ -1,0 +1,65 @@
+{
+	"pages": [
+		{
+			"path": "pages/home/home",
+			"style": {
+				"navigationBarTitleText": "首页",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/game/game",
+			"style": {
+				"navigationBarTitleText": "游戏",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/community/community",
+			"style": {
+				"navigationBarTitleText": "社区",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/mine/mine",
+			"style": {
+				"navigationBarTitleText": "我的",
+				"navigationStyle": "custom"
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "KidsMaster",
+		"navigationBarBackgroundColor": "#FFE5B4",
+		"backgroundColor": "#FFE5B4"
+	},
+	"tabBar": {
+		"color": "#7A7E83",
+		"selectedColor": "#FF6B6B",
+		"borderStyle": "white",
+		"backgroundColor": "#FFFFFF",
+		"fontSize": "18px",
+		"height": "60px",
+		"list": [
+			{
+				"pagePath": "pages/home/home",
+				"text": "🏠 首页"
+			},
+			{
+				"pagePath": "pages/game/game",
+				"text": "🎮 游戏"
+			},
+			{
+				"pagePath": "pages/community/community",
+				"text": "👥 社区"
+			},
+			{
+				"pagePath": "pages/mine/mine",
+				"text": "👤 我的"
+			}
+		]
+	},
+	"uniIdRouter": {}
+}

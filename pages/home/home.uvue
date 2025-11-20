@@ -1,0 +1,66 @@
+<template>
+	<view class="container">
+		<view class="header">
+			<text class="title">🏠 首页</text>
+		</view>
+		<view class="content">
+			<text class="placeholder">欢迎来到 KidsMaster！</text>
+			<text class="subtitle">这里是首页内容区域</text>
+		</view>
+	</view>
+</template>
+
+<script lang="uts">
+	export default {
+		data() {
+			return {
+				
+			}
+		},
+		onLoad() {
+			
+		}
+	}
+</script>
+
+<style>
+	.container {
+		flex: 1;
+		background: linear-gradient(135deg, #FFE5B4 0%, #FFCCCB 100%);
+		padding: 20px;
+	}
+	
+	.header {
+		margin-top: 40px;
+		margin-bottom: 30px;
+	}
+	
+	.title {
+		font-size: 32px;
+		font-weight: bold;
+		color: #FF6B6B;
+		text-align: center;
+		text-shadow: 2px 2px 0px #FFFFFF, 4px 4px 0px rgba(0,0,0,0.1);
+	}
+	
+	.content {
+		flex: 1;
+		justify-content: center;
+		align-items: center;
+		padding: 20px;
+	}
+	
+	.placeholder {
+		font-size: 24px;
+		color: #4ECDC4;
+		font-weight: bold;
+		margin-bottom: 15px;
+		text-align: center;
+	}
+	
+	.subtitle {
+		font-size: 18px;
+		color: #95E1D3;
+		text-align: center;
+	}
+</style>
