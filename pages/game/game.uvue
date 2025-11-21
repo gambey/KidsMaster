@@ -23,7 +23,7 @@
 
 <script lang="uts">
 	type GameItem = {
-		id: string
+		id: any
 		name: string
 		emoji: string
 		description: string
@@ -32,7 +32,7 @@
 	export default {
 		data() {
 			const games: GameItem[] = [
-				{ id: "1", name: "舒尔特方格", emoji: "🧩", description: "快速寻找到数字，提升专注能力" },
+				{ id: 1, name: "舒尔特方格", emoji: "🧩", description: "快速寻找到数字，提升专注能力" },
 				{ id: "2", name: "颜色匹配", emoji: "🎨", description: "匹配相同颜色，提升观察能力" },
 				{ id: "3", name: "字母冒险", emoji: "🔤", description: "在冒险中学习字母，寓教于乐" },
 				{ id: "4", name: "形状识别", emoji: "⭐", description: "认识各种形状，开发空间想象力" },

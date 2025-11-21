@@ -1,0 +1,379 @@
+<template>
+	<view class="container">
+		<view class="header">
+			<text class="title">🧩 舒尔特方格</text>
+		</view>
+		
+		<view class="game-info-bar" v-if="!gameStarted">
+			<text class="info-text">按照 1 → 25 的顺序点击数字</text>
+		</view>
+		
+		<view class="game-info-bar" v-if="gameStarted && !gameFinished">
+			<text class="timer-text">⏱️ 时间: {{ formatTime(elapsedTime) }}</text>
+			<text class="current-text">当前: {{ currentNumber }}/25</text>
+		</view>
+		
+		<view class="game-info-bar" v-if="gameFinished">
+			<text class="result-text">🎉 完成！用时: {{ formatTime(elapsedTime) }}</text>
+		</view>
+		
+		<view class="grid-container" v-if="gameStarted || gameFinished">
+			<view class="grid-row" v-for="(row, rowIndex) in grid" :key="rowIndex">
+			<view 
+				class="grid-cell" 
+				v-for="(cell, cellIndex) in row" 
+				:key="cellIndex"
+				:class="{ 'cell-clicked': cell.clicked }"
+				@click="handleCellClick(cell)"
+			>
+					<text class="cell-number">{{ cell.number }}</text>
+				</view>
+			</view>
+		</view>
+		
+		<view class="button-container" v-if="!gameStarted">
+			<view class="start-button" @click="startGame">
+				<text class="button-text">🚀 开始游戏</text>
+			</view>
+		</view>
+		
+		<view class="button-container" v-if="gameFinished">
+			<view class="restart-button" @click="restartGame">
+				<text class="button-text">🔄 再来一次</text>
+			</view>
+			<view class="back-button" @click="goBack">
+				<text class="button-text">← 返回</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script lang="uts">
+	type GridCell = {
+		number: number
+		clicked: boolean
+	}
+	
+	export default {
+		data() {
+			return {
+			gameStarted: false,
+			gameFinished: false,
+			grid: [] as GridCell[][],
+			currentNumber: 1,
+			startTime: 0,
+			elapsedTime: 0,
+			timer: 0
+			}
+		},
+		onLoad() {
+			
+		},
+		onHide() {
+			// 页面隐藏时也清理定时器，防止内存泄漏
+			this.stopTimer()
+		},
+		onUnload() {
+			// 页面卸载时确保清理所有资源
+			this.stopTimer()
+			// 清理数据引用
+			this.grid = []
+		},
+		methods: {
+			generateGrid() {
+				// 生成1-25的随机数组
+				const numbers: number[] = []
+				for (let i = 1; i <= 25; i++) {
+					numbers.push(i)
+				}
+				// 随机打乱
+				for (let i = numbers.length - 1; i > 0; i--) {
+					const j = Math.floor(Math.random() * (i + 1))
+					const temp = numbers[i]
+					numbers[i] = numbers[j]
+					numbers[j] = temp
+				}
+				
+				// 创建5x5网格
+				const newGrid: GridCell[][] = []
+				for (let i = 0; i < 5; i++) {
+					const row: GridCell[] = []
+					for (let j = 0; j < 5; j++) {
+						const index = i * 5 + j
+						row.push({
+							number: numbers[index],
+							clicked: false
+						})
+					}
+					newGrid.push(row)
+				}
+				this.grid = newGrid
+			},
+			startGame() {
+				this.generateGrid()
+				this.gameStarted = true
+				this.gameFinished = false
+				this.currentNumber = 1
+				this.startTime = Date.now()
+				this.elapsedTime = 0
+				this.startTimer()
+			},
+			restartGame() {
+				this.startGame()
+			},
+			handleCellClick(cell: GridCell) {
+				if (this.gameFinished || cell.clicked) {
+					return
+				}
+				
+				if (cell.number === this.currentNumber) {
+					cell.clicked = true
+					this.currentNumber++
+					
+					// 检查是否完成
+					if (this.currentNumber > 25) {
+						this.finishGame()
+					}
+				} else {
+					// 点击错误，提示
+					uni.showToast({
+						title: '顺序不对哦，继续加油！',
+						icon: 'none',
+						duration: 1000
+					})
+				}
+			},
+			finishGame() {
+				this.gameFinished = true
+				this.stopTimer()
+				uni.showToast({
+					title: '太棒了！完成游戏！',
+					icon: 'success',
+					duration: 2000
+				})
+			},
+			startTimer() {
+				// 先清理之前的定时器
+				this.stopTimer()
+				// 创建新的定时器
+				const timerId = setInterval(() => {
+					// 检查游戏是否还在进行中
+					if (this.gameStarted && !this.gameFinished) {
+						this.elapsedTime = Date.now() - this.startTime
+					}
+				}, 100)
+				this.timer = timerId as number
+			},
+			stopTimer() {
+				if (this.timer != 0) {
+					try {
+						clearInterval(this.timer)
+					} catch (e) {
+						// 忽略清理错误
+					}
+					this.timer = 0
+				}
+			},
+			formatTime(ms: number): string {
+				const seconds = Math.floor(ms / 1000)
+				const minutes = Math.floor(seconds / 60)
+				const secs = seconds % 60
+				const millis = Math.floor((ms % 1000) / 100)
+				if (minutes > 0) {
+					return `${minutes}分${secs}秒`
+				}
+				return `${secs}.${millis}秒`
+			},
+			goBack() {
+				uni.navigateBack()
+			}
+		}
+	}
+</script>
+
+<style>
+	.container {
+		flex: 1;
+		background: linear-gradient(135deg, #A8E6CF 0%, #D4F1F4 100%);
+		padding: 20px;
+	}
+	
+	.header {
+		margin-top: 20px;
+		margin-bottom: 20px;
+	}
+	
+	.title {
+		font-size: 32px;
+		font-weight: bold;
+		color: #4ECDC4;
+		text-align: center;
+		text-shadow: 2px 2px 0px #FFFFFF, 4px 4px 0px rgba(0,0,0,0.1);
+	}
+	
+	.game-info-bar {
+		flex-direction: row;
+		justify-content: space-between;
+		align-items: center;
+		background: rgba(255, 255, 255, 0.8);
+		border-radius: 15px;
+		border: 3px solid #FFFFFF;
+		padding: 15px 20px;
+		margin-bottom: 20px;
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.1);
+	}
+	
+	.info-text {
+		font-size: 18px;
+		color: #4ECDC4;
+		font-weight: bold;
+		text-align: center;
+		flex: 1;
+	}
+	
+	.timer-text {
+		font-size: 18px;
+		color: #FF6B6B;
+		font-weight: bold;
+	}
+	
+	.current-text {
+		font-size: 18px;
+		color: #4ECDC4;
+		font-weight: bold;
+	}
+	
+	.result-text {
+		font-size: 20px;
+		color: #FF6B6B;
+		font-weight: bold;
+		text-align: center;
+		flex: 1;
+	}
+	
+	.grid-container {
+		width: 100%;
+		align-items: center;
+		justify-content: center;
+		margin: 20px 0;
+	}
+	
+	.grid-row {
+		flex-direction: row;
+		justify-content: center;
+		margin-bottom: 8px;
+	}
+	
+	.grid-cell {
+		width: 60px;
+		height: 60px;
+		background: linear-gradient(135deg, #FFE5B4 0%, #FFCCCB 100%);
+		border-radius: 12px;
+		border: 3px solid #FF6B6B;
+		margin: 4px;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0px 4px 0px rgba(255, 107, 107, 0.3), 0px 2px 0px rgba(255, 107, 107, 0.2);
+	}
+	
+	.grid-cell:active {
+		transform: translateY(2px);
+		box-shadow: 0px 2px 0px rgba(255, 107, 107, 0.2), 0px 1px 0px rgba(255, 107, 107, 0.1);
+	}
+	
+	.cell-number {
+		font-size: 24px;
+		font-weight: bold;
+		color: #FF6B6B;
+		text-shadow: 2px 2px 0px #FFFFFF, 1px 1px 0px rgba(0,0,0,0.1);
+	}
+	
+	.cell-clicked {
+		background: linear-gradient(135deg, #7A7E83 0%, #5A5A5A 100%);
+		border-color: #4A4A4A;
+		opacity: 0.8;
+	}
+	
+	.cell-clicked .cell-number {
+		color: #CCCCCC;
+		text-shadow: 2px 2px 0px rgba(0,0,0,0.5), 1px 1px 0px rgba(0,0,0,0.3);
+		text-decoration: line-through;
+	}
+	
+	.cell-current {
+		background: linear-gradient(135deg, #FFE5B4 0%, #FFCCCB 100%);
+		border-color: #FF6B6B;
+		box-shadow: 0px 4px 0px rgba(255, 107, 107, 0.3), 0px 2px 0px rgba(255, 107, 107, 0.2);
+	}
+	
+	.cell-current .cell-number {
+		color: #FF6B6B;
+		font-size: 28px;
+	}
+	
+	.button-container {
+		margin-top: 30px;
+		align-items: center;
+		justify-content: center;
+		flex-direction: row;
+		flex-wrap: wrap;
+	}
+	
+	.start-button {
+		width: 200px;
+		height: 60px;
+		background: linear-gradient(135deg, #FF6B6B 0%, #FF8E8E 100%);
+		border-radius: 20px;
+		border: 4px solid #FFFFFF;
+		box-shadow: 0px 8px 0px rgba(0,0,0,0.2), 0px 4px 0px rgba(0,0,0,0.15);
+		align-items: center;
+		justify-content: center;
+		margin: 10px;
+	}
+	
+	.start-button:active {
+		transform: translateY(2px);
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.15), 0px 2px 0px rgba(0,0,0,0.1);
+	}
+	
+	.restart-button {
+		width: 160px;
+		height: 60px;
+		background: linear-gradient(135deg, #4ECDC4 0%, #95E1D3 100%);
+		border-radius: 20px;
+		border: 4px solid #FFFFFF;
+		box-shadow: 0px 8px 0px rgba(0,0,0,0.2), 0px 4px 0px rgba(0,0,0,0.15);
+		align-items: center;
+		justify-content: center;
+		margin: 10px;
+	}
+	
+	.restart-button:active {
+		transform: translateY(2px);
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.15), 0px 2px 0px rgba(0,0,0,0.1);
+	}
+	
+	.back-button {
+		width: 160px;
+		height: 60px;
+		background: linear-gradient(135deg, #FFE5B4 0%, #FFCCCB 100%);
+		border-radius: 20px;
+		border: 4px solid #FFFFFF;
+		box-shadow: 0px 8px 0px rgba(0,0,0,0.2), 0px 4px 0px rgba(0,0,0,0.15);
+		align-items: center;
+		justify-content: center;
+		margin: 10px;
+	}
+	
+	.back-button:active {
+		transform: translateY(2px);
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.15), 0px 2px 0px rgba(0,0,0,0.1);
+	}
+	
+	.button-text {
+		font-size: 20px;
+		font-weight: bold;
+		color: #FFFFFF;
+		text-shadow: 2px 2px 0px rgba(0,0,0,0.2);
+	}
+</style>
