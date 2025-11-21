@@ -53,9 +53,19 @@
 		},
 		methods: {
 			goToGameDetail(game: GameItem) {
-				uni.navigateTo({
-					url: `/pages/game/detail/detail?id=${game.id}&name=${encodeURIComponent(game.name)}&emoji=${encodeURIComponent(game.emoji)}&description=${encodeURIComponent(game.description)}`
-				})
+				// 根据游戏ID直接跳转到对应的游戏页面
+				const gameId = game.id
+				if (gameId === "1" || game.name === "舒尔特方格"||game.name.includes("舒尔特")) {
+					// 舒尔特方格 - 直接跳转到游戏页面并自动开始
+					uni.navigateTo({
+						url: '/pages/game/schulte/schulte?autoStart=true'
+					})
+				} else {
+					// 其他游戏暂时跳转到详情页面
+					uni.navigateTo({
+						url: `/pages/game/detail/detail?id=${game.id}&name=${encodeURIComponent(game.name)}&emoji=${encodeURIComponent(game.emoji)}&description=${encodeURIComponent(game.description)}`
+					})
+				}
 			}
 		}
 	}

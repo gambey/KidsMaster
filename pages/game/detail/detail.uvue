@@ -87,7 +87,7 @@
 					console.log(this.gameName + ' 游戏启动!')
 					// 舒尔特方格
 					uni.navigateTo({
-						url: '/pages/game/schulte/schulte'
+						url: '/pages/game/schulte/schulte?autoStart=true'
 					})
 				} else {
 					console.log('条件不匹配，显示提示')

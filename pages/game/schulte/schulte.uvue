@@ -5,12 +5,27 @@
 		</view>
 		
 		<view class="game-info-bar" v-if="!gameStarted">
-			<text class="info-text">按照 1 → 25 的顺序点击数字</text>
+			<text class="info-text">按照 1 → {{ totalNumbers }} 的顺序点击数字</text>
+		</view>
+		
+		<view class="settings-container" v-if="!gameStarted">
+			<text class="settings-title">选择难度：</text>
+			<view class="size-buttons">
+				<view 
+					class="size-button" 
+					v-for="size in [3, 4, 5, 6, 7, 8, 9]" 
+					:key="size"
+					:class="{ 'size-button-active': gridSize === size }"
+					@click="setGridSize(size)"
+				>
+					<text class="size-button-text">{{ size }}×{{ size }}</text>
+				</view>
+			</view>
 		</view>
 		
 		<view class="game-info-bar" v-if="gameStarted && !gameFinished">
 			<text class="timer-text">⏱️ 时间: {{ formatTime(elapsedTime) }}</text>
-			<text class="current-text">当前: {{ currentNumber }}/25</text>
+			<text class="current-text">当前: {{ currentNumber }}/{{ totalNumbers }}</text>
 		</view>
 		
 		<view class="game-info-bar" v-if="gameFinished">
@@ -19,14 +34,15 @@
 		
 		<view class="grid-container" v-if="gameStarted || gameFinished">
 			<view class="grid-row" v-for="(row, rowIndex) in grid" :key="rowIndex">
-			<view 
-				class="grid-cell" 
-				v-for="(cell, cellIndex) in row" 
-				:key="cellIndex"
-				:class="{ 'cell-clicked': cell.clicked }"
-				@click="handleCellClick(cell)"
-			>
-					<text class="cell-number">{{ cell.number }}</text>
+				<view 
+					class="grid-cell" 
+					v-for="(cell, cellIndex) in row" 
+					:key="cellIndex"
+					:class="{ 'cell-clicked': cell.clicked }"
+					:style="{ width: cellSize + 'px', height: cellSize + 'px' }"
+					@click="handleCellClick(cell)"
+				>
+					<text class="cell-number" :style="{ fontSize: fontSize + 'px' }">{{ cell.number }}</text>
 				</view>
 			</view>
 		</view>
@@ -63,11 +79,39 @@
 			currentNumber: 1,
 			startTime: 0,
 			elapsedTime: 0,
-			timer: 0
+			timer: 0,
+			gridSize: 3,
+			totalNumbers: 9,
+			cellSize: 60,
+			fontSize: 24
 			}
 		},
-		onLoad() {
+		onLoad(options: OnLoadOptions) {
+			// 从本地存储读取用户设置的阶数
+			try {
+				const savedSize = uni.getStorageSync('schulteGridSize')
+				if (savedSize != null && savedSize != "") {
+					const size = savedSize as number
+					if (size >= 3 && size <= 9) {
+						this.gridSize = size as number
+						this.updateGridConfig()
+					}
+				}
+			} catch (e) {
+				// 忽略错误，使用默认值
+			}
 			
+			// 检查是否需要自动开始游戏
+			const autoStart = options["autoStart"]
+			if (autoStart != null) {
+				const autoStartStr = autoStart.toString()
+				if (autoStartStr === "true" || autoStartStr === "1") {
+					// 延迟一小段时间确保页面渲染完成
+					setTimeout(() => {
+						this.startGame()
+					}, 100)
+				}
+			}
 		},
 		onHide() {
 			// 页面隐藏时也清理定时器，防止内存泄漏
@@ -80,10 +124,38 @@
 			this.grid = []
 		},
 		methods: {
+			setGridSize(size: number) {
+				this.gridSize = size
+				this.updateGridConfig()
+				// 保存到本地存储
+				try {
+					uni.setStorageSync('schulteGridSize', size)
+				} catch (e) {
+					// 忽略错误
+				}
+			},
+			updateGridConfig() {
+				this.totalNumbers = this.gridSize * this.gridSize
+				// 根据阶数动态调整单元格大小和字体大小
+				// 确保在屏幕上能完整显示
+				if (this.gridSize <= 4) {
+					this.cellSize = 60
+					this.fontSize = 24
+				} else if (this.gridSize <= 6) {
+					this.cellSize = 50
+					this.fontSize = 20
+				} else if (this.gridSize <= 7) {
+					this.cellSize = 45
+					this.fontSize = 18
+				} else {
+					this.cellSize = 40
+					this.fontSize = 16
+				}
+			},
 			generateGrid() {
-				// 生成1-25的随机数组
+				// 根据阶数生成对应数量的随机数组
 				const numbers: number[] = []
-				for (let i = 1; i <= 25; i++) {
+				for (let i = 1; i <= this.totalNumbers; i++) {
 					numbers.push(i)
 				}
 				// 随机打乱
@@ -94,12 +166,12 @@
 					numbers[j] = temp
 				}
 				
-				// 创建5x5网格
+				// 创建网格
 				const newGrid: GridCell[][] = []
-				for (let i = 0; i < 5; i++) {
+				for (let i = 0; i < this.gridSize; i++) {
 					const row: GridCell[] = []
-					for (let j = 0; j < 5; j++) {
-						const index = i * 5 + j
+					for (let j = 0; j < this.gridSize; j++) {
+						const index = i * this.gridSize + j
 						row.push({
 							number: numbers[index],
 							clicked: false
@@ -131,7 +203,7 @@
 					this.currentNumber++
 					
 					// 检查是否完成
-					if (this.currentNumber > 25) {
+					if (this.currentNumber > this.totalNumbers) {
 						this.finishGame()
 					}
 				} else {
@@ -251,6 +323,63 @@
 		flex: 1;
 	}
 	
+	.settings-container {
+		background: rgba(255, 255, 255, 0.8);
+		border-radius: 15px;
+		border: 3px solid #FFFFFF;
+		padding: 20px;
+		margin-bottom: 20px;
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.1);
+	}
+	
+	.settings-title {
+		font-size: 18px;
+		color: #4ECDC4;
+		font-weight: bold;
+		margin-bottom: 15px;
+		text-align: center;
+	}
+	
+	.size-buttons {
+		flex-direction: row;
+		flex-wrap: wrap;
+		justify-content: center;
+		align-items: center;
+	}
+	
+	.size-button {
+		min-width: 70px;
+		height: 50px;
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 12px;
+		border: 3px solid #FFFFFF;
+		margin: 5px;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.1), 0px 2px 0px rgba(0,0,0,0.05);
+	}
+	
+	.size-button:active {
+		transform: translateY(2px);
+		box-shadow: 0px 2px 0px rgba(0,0,0,0.05), 0px 1px 0px rgba(0,0,0,0.02);
+	}
+	
+	.size-button-active {
+		background: linear-gradient(135deg, #4ECDC4 0%, #95E1D3 100%);
+		border-color: #4ECDC4;
+	}
+	
+	.size-button-text {
+		font-size: 16px;
+		font-weight: bold;
+		color: #4ECDC4;
+	}
+	
+	.size-button-active .size-button-text {
+		color: #FFFFFF;
+		text-shadow: 1px 1px 0px rgba(0,0,0,0.2);
+	}
+	
 	.grid-container {
 		width: 100%;
 		align-items: center;
@@ -261,16 +390,14 @@
 	.grid-row {
 		flex-direction: row;
 		justify-content: center;
-		margin-bottom: 8px;
+		margin-bottom: 4px;
 	}
 	
 	.grid-cell {
-		width: 60px;
-		height: 60px;
 		background: linear-gradient(135deg, #FFE5B4 0%, #FFCCCB 100%);
 		border-radius: 12px;
 		border: 3px solid #FF6B6B;
-		margin: 4px;
+		margin: 2px;
 		align-items: center;
 		justify-content: center;
 		box-shadow: 0px 4px 0px rgba(255, 107, 107, 0.3), 0px 2px 0px rgba(255, 107, 107, 0.2);
@@ -282,7 +409,6 @@
 	}
 	
 	.cell-number {
-		font-size: 24px;
 		font-weight: bold;
 		color: #FF6B6B;
 		text-shadow: 2px 2px 0px #FFFFFF, 1px 1px 0px rgba(0,0,0,0.1);
