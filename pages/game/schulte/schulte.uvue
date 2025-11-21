@@ -147,9 +147,12 @@
 				} else if (this.gridSize <= 7) {
 					this.cellSize = 45
 					this.fontSize = 18
-				} else {
-					this.cellSize = 40
+				} else if (this.gridSize <= 8) {
+					this.cellSize = 38
 					this.fontSize = 16
+				} else {
+					this.cellSize = 34
+					this.fontSize = 14
 				}
 			},
 			generateGrid() {

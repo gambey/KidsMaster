@@ -29,6 +29,13 @@
 			}
 		},
 		{
+			"path": "pages/game/numhearing/numhearing",
+			"style": {
+				"navigationBarTitleText": "听数挑战",
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/community/community",
 			"style": {
 				"navigationBarTitleText": "社区",

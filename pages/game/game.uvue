@@ -33,7 +33,7 @@
 		data() {
 			const games: GameItem[] = [
 				{ id: 1, name: "舒尔特方格", emoji: "🧩", description: "快速寻找到数字，提升专注能力" },
-				{ id: "2", name: "颜色匹配", emoji: "🎨", description: "匹配相同颜色，提升观察能力" },
+				{ id: "2", name: "听数挑战", emoji: "🎧", description: "听数字并正确输入，提升听觉记忆" },
 				{ id: "3", name: "字母冒险", emoji: "🔤", description: "在冒险中学习字母，寓教于乐" },
 				{ id: "4", name: "形状识别", emoji: "⭐", description: "认识各种形状，开发空间想象力" },
 				{ id: "5", name: "记忆挑战", emoji: "🧠", description: "挑战记忆力，锻炼大脑" },
@@ -55,10 +55,15 @@
 			goToGameDetail(game: GameItem) {
 				// 根据游戏ID直接跳转到对应的游戏页面
 				const gameId = game.id
-				if (gameId === "1" || game.name === "舒尔特方格"||game.name.includes("舒尔特")) {
+				if (gameId === "1" || game.name === "舒尔特方格" || game.name.includes("舒尔特")) {
 					// 舒尔特方格 - 直接跳转到游戏页面并自动开始
 					uni.navigateTo({
 						url: '/pages/game/schulte/schulte?autoStart=true'
+					})
+				} else if (gameId === "2" || game.name === "听数挑战" || game.name.includes("听数")) {
+					// 听数挑战 - 直接跳转到游戏页面
+					uni.navigateTo({
+						url: '/pages/game/numhearing/numhearing'
 					})
 				} else {
 					// 其他游戏暂时跳转到详情页面

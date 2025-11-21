@@ -1,0 +1,523 @@
+<template>
+	<view class="container">
+		<view class="header">
+			<text class="title-icon">🎧</text>
+			<text class="title">听数挑战</text>
+		</view>
+		
+		<view class="score-bar">
+			<text class="score-text">分数: {{ score }}</text>
+			<text class="record-text">最高记录: {{ highestScore }}</text>
+		</view>
+		
+		<view class="countdown-overlay" v-if="countdown > 0">
+			<text class="countdown-text">{{ countdown }}</text>
+		</view>
+		
+		<view class="game-area">
+			<!-- 开始按钮 -->
+			<view class="start-button-wrapper">
+				<view class="start-button" v-if="!gameStarted" @click="startGame">
+					<text class="start-text">开始</text>
+				</view>
+				<view class="game-status" v-if="gameStarted && !gameFinished">
+					<text class="status-text">游戏中...</text>
+				</view>
+			</view>
+			
+			<!-- 数字按钮网格 -->
+			<view class="number-grid">
+				<!-- 第一行：1, 2, 3 -->
+				<view class="number-row">
+					<view class="number-button" @click="handleNumberClick(1)">
+						<text class="number-text">1</text>
+					</view>
+					<view class="number-button" @click="handleNumberClick(2)">
+						<text class="number-text">2</text>
+					</view>
+					<view class="number-button" @click="handleNumberClick(3)">
+						<text class="number-text">3</text>
+					</view>
+				</view>
+				<!-- 第二行：4, 5, 6 -->
+				<view class="number-row">
+					<view class="number-button" @click="handleNumberClick(4)">
+						<text class="number-text">4</text>
+					</view>
+					<view class="number-button" @click="handleNumberClick(5)">
+						<text class="number-text">5</text>
+					</view>
+					<view class="number-button" @click="handleNumberClick(6)">
+						<text class="number-text">6</text>
+					</view>
+				</view>
+				<!-- 第三行：7, 8, 9 -->
+				<view class="number-row">
+					<view class="number-button" @click="handleNumberClick(7)">
+						<text class="number-text">7</text>
+					</view>
+					<view class="number-button" @click="handleNumberClick(8)">
+						<text class="number-text">8</text>
+					</view>
+					<view class="number-button" @click="handleNumberClick(9)">
+						<text class="number-text">9</text>
+					</view>
+				</view>
+				<!-- 第四行：0 (宽按钮) -->
+				<view class="number-row">
+					<view class="number-button number-button-zero" @click="handleNumberClick(0)">
+						<text class="number-text">0</text>
+					</view>
+				</view>
+			</view>
+		</view>
+		
+		<view class="result-overlay" v-if="gameFinished">
+			<view class="result-box">
+				<text class="result-title">游戏结束</text>
+				<text class="result-score">得分: {{ score }}</text>
+				<view class="result-buttons">
+					<view class="result-button" @click="restartGame">
+						<text class="button-text">再来一次</text>
+					</view>
+					<view class="result-button" @click="goBack">
+						<text class="button-text">返回</text>
+					</view>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script lang="uts">
+	export default {
+		data() {
+			return {
+			gameStarted: false,
+			gameFinished: false,
+			score: 0,
+			highestScore: 0,
+			countdown: 0,
+			numberSequence: [] as number[],		
+			currentInputIndex: -1,
+			audioTimer: 0,
+			countdownTimer: 0,
+			numberPositions: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+			numberPlayTimeInterval:[1000,2000,3000],//游戏播报数字间隔时间，代表游戏难度。
+			gameLevel:0, //0:hard 1:normal 2:easy
+			maxNumCnt:3, //最大待输入数字数量
+			}
+		},
+		onLoad() {
+			// 加载最高记录
+			try {
+				const savedScore = uni.getStorageSync('numhearingHighestScore')
+				if (savedScore != null && savedScore != "") {
+					const scoreNum = parseInt(savedScore.toString())
+					if (!isNaN(scoreNum)) {
+						this.highestScore = scoreNum
+					}
+				}
+			} catch (e) {
+				// 忽略错误
+			}
+		},
+		onHide() {
+			this.stopGame()
+		},
+		onUnload() {
+			this.stopGame()
+		},
+		methods: {
+			startGame() {
+				this.gameStarted = true
+				this.gameFinished = false
+				this.score = 0
+				this.numberSequence = []
+				this.currentInputIndex = -1
+				
+				// 3秒倒计时
+				this.countdown = 3
+				this.countdownTimer = setInterval(() => {
+					this.countdown--
+					if (this.countdown <= 0) {
+						this.stopCountdown()
+						this.startAudioSequence()
+					}
+				}, 1000) as number
+			},
+			stopCountdown() {
+				if (this.countdownTimer != 0) {
+					try {
+						clearInterval(this.countdownTimer)
+					} catch (e) {
+						// 忽略错误
+					}
+					this.countdownTimer = 0
+				}
+			},
+			startAudioSequence() {
+				// 生成第一个数字并播报
+				this.generateAndPlayNumber()
+				
+				// 每隔n秒播报一个数字
+				this.audioTimer = setInterval(() => {
+					this.generateAndPlayNumber()
+				}, this.numberPlayTimeInterval[this.gameLevel]) as number
+			},
+			generateAndPlayNumber() {
+				if(this.numberSequence.length>this.maxNumCnt)
+				{
+					this.endGame()
+					return
+				}
+				// 随机生成0-9的数字
+				const randomNum = Math.floor(Math.random() * 10)
+				this.numberSequence.push(randomNum)
+				
+				// 播报数字（使用系统TTS或显示提示）
+				this.playNumberAudio(randomNum)
+			},
+			playNumberAudio(num: number) {
+				// 使用uni.showToast显示数字（实际项目中可以使用TTS）
+				uni.showToast({
+					title: `数字: ${num}`,
+					icon:'none',
+					duration: 500,//this.numberPlayTimeInterval[this.gameLevel]>>1,
+					position: 'top',
+					
+				})
+				
+				// 这里可以添加实际的音频播放
+				// 例如使用 uni.createInnerAudioContext() 播放预录制的音频
+			},
+			handleNumberClick(num: number) {
+				if (!this.gameStarted || this.gameFinished) {
+					return
+				}
+				
+				// 检查输入是否正确
+				const expectedIndex = this.numberSequence.length-1
+				const expectedNum = this.numberSequence[0]
+				if (num === expectedNum) {
+					// 输入正确
+					this.score += 5
+					this.numberSequence.shift()
+				} else {
+					// 输入错误，游戏结束
+					this.endGame()
+				}
+			},
+			endGame() {
+				this.gameFinished = true
+				this.numberSequence = []
+				this.stopGame()
+				// 更新最高记录
+				if (this.score > this.highestScore) {
+					this.highestScore = this.score
+					try {
+						uni.setStorageSync('numhearingHighestScore', this.highestScore)
+					} catch (e) {
+						// 忽略错误
+					}
+				}
+				
+				uni.showToast({
+					title: '游戏结束！',
+					icon: 'none',
+					duration: 2000
+				})
+			},
+			stopGame() {
+				this.stopCountdown()
+				if (this.audioTimer != 0) {
+					try {
+						clearInterval(this.audioTimer)
+					} catch (e) {
+						// 忽略错误
+					}
+					this.audioTimer = 0
+				}
+			},
+			restartGame() {
+				this.gameStarted = false
+				this.gameFinished = false
+				this.countdown = 0
+			},
+		
+			goBack() {
+				uni.navigateBack()
+			}
+		}
+	}
+</script>
+
+<style>
+	.container {
+		flex: 1;
+		background: linear-gradient(135deg, #FFF9C4 0%, #FFE0B2 100%);
+		padding: 15px;
+	}
+	
+	.header {
+		margin-top: 10px;
+		margin-bottom: 25px;
+		align-items: center;
+		justify-content: center;
+		flex-direction: row;
+	}
+	
+	.title-icon {
+		font-size: 40px;
+		margin-right: 12px;
+	}
+	
+	.title {
+		font-size: 38px;
+		font-weight: bold;
+		color: #00C853;
+		text-align: center;
+		text-shadow: 2px 2px 0px #FFFFFF, 3px 3px 0px rgba(0,0,0,0.1);
+	}
+	
+	.score-bar {
+		flex-direction: row;
+		justify-content: space-between;
+		align-items: center;
+		padding: 12px 0;
+		margin-bottom: 25px;
+		border-bottom: 2px solid #FFD54F;
+	}
+	
+	.score-text {
+		font-size: 24px;
+		color: #00C853;
+		font-weight: bold;
+		text-shadow: 1px 1px 0px #FFFFFF;
+	}
+	
+	.record-text {
+		font-size: 20px;
+		color: #00C853;
+		font-weight: bold;
+		text-shadow: 1px 1px 0px #FFFFFF;
+	}
+	
+	.countdown-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.7);
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+	}
+	
+	.countdown-text {
+		font-size: 120px;
+		font-weight: bold;
+		color: #FFFFFF;
+		text-shadow: 4px 4px 0px rgba(0,0,0,0.3);
+	}
+	
+	.game-area {
+		width: 100%;
+		align-items: center;
+		justify-content: center;
+		margin: 15px 0;
+		padding: 0 5px;
+	}
+	
+	.start-button-wrapper {
+		width: 100%;
+		align-items: center;
+		justify-content: center;
+		margin-bottom: 25px;
+	}
+	
+	.number-grid {
+		width: 100%;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.number-row {
+		flex-direction: row;
+		justify-content: center;
+		align-items: center;
+		margin-bottom: 12px;
+		width: 100%;
+	}
+	
+	.number-button {
+		width: 28%;
+		max-width: 100px;
+		height: 75px;
+		background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+		border-radius: 18px;
+		border: 4px solid #0D47A1;
+		align-items: center;
+		justify-content: center;
+		margin: 0 6px;
+		box-shadow: 0px 6px 0px rgba(13, 71, 161, 0.6), 0px 3px 0px rgba(13, 71, 161, 0.5), 0px 1px 8px rgba(0,0,0,0.2);
+	}
+	
+	.number-button:active {
+		transform: translateY(3px);
+		box-shadow: 0px 3px 0px rgba(13, 71, 161, 0.5), 0px 1px 0px rgba(13, 71, 161, 0.4), 0px 1px 4px rgba(0,0,0,0.15);
+	}
+	
+	.number-button-zero {
+		width: 90%;
+		max-width: 320px;
+		height: 75px;
+		background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+		border: 4px solid #0D47A1;
+		
+	}
+	
+	.number-text {
+		font-size: 36px;
+		font-weight: bold;
+		color: #00ff00;
+		text-shadow: 3px 3px 0px rgba(0,0,0,0.6), 1px 1px 0px rgba(0,0,0,0.5);
+	}
+	
+	.start-button {
+		width: 85%;
+		max-width: 300px;
+		height: 70px;
+		background: linear-gradient(135deg, #00C853 0%, #00E676 100%);
+		border-radius: 20px;
+		border: 4px solid #00B248;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0px 8px 0px rgba(0, 178, 72, 0.6), 0px 4px 0px rgba(0, 178, 72, 0.5), 0px 2px 10px rgba(0,0,0,0.2);
+	}
+	
+	.start-button:active {
+		transform: translateY(4px);
+		box-shadow: 0px 4px 0px rgba(0, 178, 72, 0.5), 0px 2px 0px rgba(0, 178, 72, 0.4), 0px 1px 5px rgba(0,0,0,0.15);
+	}
+	
+	.start-text {
+		font-size: 34px;
+		font-weight: bold;
+		color: #00ff00;
+		text-shadow: 3px 3px 0px rgba(0,0,0,0.6), 1px 1px 0px rgba(0,0,0,0.5);
+	}
+	
+	.game-status {
+		width: 85%;
+		max-width: 300px;
+		height: 70px;
+		background: linear-gradient(135deg, #FFF9C4 0%, #FFF59D 100%);
+		border-radius: 20px;
+		border: 4px solid #00C853;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0px 6px 0px rgba(0, 200, 83, 0.4), 0px 3px 0px rgba(0, 200, 83, 0.3);
+	}
+	
+	.status-text {
+		font-size: 26px;
+		font-weight: bold;
+		color: #00C853;
+		text-shadow: 2px 2px 0px #FFFFFF, 1px 1px 0px rgba(0,0,0,0.1);
+	}
+	
+	.input-sequence {
+		background: linear-gradient(135deg, #FFFFFF 0%, #FFF9C4 100%);
+		border-radius: 20px;
+		border: 4px solid #00C853;
+		padding: 18px;
+		margin-top: 20px;
+		box-shadow: 0px 6px 0px rgba(0, 200, 83, 0.4), 0px 3px 0px rgba(0, 200, 83, 0.3), 0px 1px 8px rgba(0,0,0,0.1);
+		align-items: center;
+		justify-content: center;
+		flex-direction: row;
+	}
+	
+	.sequence-label {
+		font-size: 20px;
+		color: #00C853;
+		font-weight: bold;
+		margin-right: 12px;
+		text-shadow: 1px 1px 0px #FFFFFF;
+	}
+	
+	.sequence-text {
+		font-size: 26px;
+		color: #00B248;
+		font-weight: bold;
+		letter-spacing: 4px;
+		text-shadow: 1px 1px 0px #FFFFFF;
+	}
+	
+	.result-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.7);
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+	}
+	
+	.result-box {
+		width: 300px;
+		background: rgba(255, 255, 255, 0.95);
+		border-radius: 20px;
+		border: 4px solid #4CAF50;
+		padding: 30px;
+		align-items: center;
+		box-shadow: 0px 8px 0px rgba(0,0,0,0.2);
+	}
+	
+	.result-title {
+		font-size: 28px;
+		font-weight: bold;
+		color: #4CAF50;
+		margin-bottom: 20px;
+	}
+	
+	.result-score {
+		font-size: 24px;
+		color: #66BB6A;
+		font-weight: bold;
+		margin-bottom: 30px;
+	}
+	
+	.result-buttons {
+		flex-direction: row;
+		justify-content: space-around;
+		width: 100%;
+	}
+	
+	.result-button {
+		width: 120px;
+		height: 50px;
+		background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
+		border-radius: 15px;
+		border: 3px solid #FFFFFF;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.15);
+	}
+	
+	.result-button:active {
+		transform: translateY(2px);
+		box-shadow: 0px 2px 0px rgba(0,0,0,0.1);
+	}
+	
+	.button-text {
+		font-size: 18px;
+		font-weight: bold;
+		color: #FFFFFF;
+		text-shadow: 1px 1px 0px rgba(0,0,0,0.2);
+	}
+</style>
