@@ -11,6 +11,34 @@
 		<view class="game-info">
 			<text class="game-description">听数字并正确输入，提升听觉记忆</text>
 		</view>
+		
+		<view class="settings-container">
+			<text class="settings-title">选择难度：</text>
+			<view class="difficulty-buttons">
+				<view 
+					class="difficulty-button" 
+					:class="{ 'difficulty-button-active': difficulty === 'easy' }"
+					@click="setDifficulty('easy')"
+				>
+					<text class="difficulty-button-text">简单</text>
+				</view>
+				<view 
+					class="difficulty-button" 
+					:class="{ 'difficulty-button-active': difficulty === 'normal' }"
+					@click="setDifficulty('normal')"
+				>
+					<text class="difficulty-button-text">标准</text>
+				</view>
+				<view 
+					class="difficulty-button" 
+					:class="{ 'difficulty-button-active': difficulty === 'hard' }"
+					@click="setDifficulty('hard')"
+				>
+					<text class="difficulty-button-text">困难</text>
+				</view>
+			</view>
+		</view>
+		
 		<view class="button-container">
 			<view class="start-button" @click="startGame">
 				<text class="button-text">🎯 开始游戏</text>
@@ -23,14 +51,36 @@
 	export default {
 		data() {
 			return {
+				difficulty: 'normal' // 默认标准难度
 			}
 		},
 		onLoad(options: OnLoadOptions) {
+			// 从本地存储读取用户设置的难度
+			try {
+				const savedDifficulty = uni.getStorageSync('numhearingDifficulty')
+				if (savedDifficulty != null && savedDifficulty != "") {
+					const diff = savedDifficulty.toString()
+					if (diff === 'easy' || diff === 'normal' || diff === 'hard') {
+						this.difficulty = diff
+					}
+				}
+			} catch (e) {
+				// 忽略错误，使用默认值
+			}
 		},
 		methods: {
+			setDifficulty(level: string) {
+				this.difficulty = level
+				// 保存到本地存储
+				try {
+					uni.setStorageSync('numhearingDifficulty', level)
+				} catch (e) {
+					// 忽略错误
+				}
+			},
 			startGame() {
 				uni.navigateTo({
-					url: '/pages/game/numhearing/numhearing'
+					url: `/pages/game/numhearing/numhearing?difficulty=${this.difficulty}`
 				})
 			}
 		}
@@ -122,6 +172,62 @@
 		font-weight: bold;
 		color: #FFFFFF;
 		text-shadow: 2px 2px 0px rgba(0,0,0,0.2);
+	}
+	
+	.settings-container {
+		background: rgba(255, 255, 255, 0.8);
+		border-radius: 15px;
+		border: 3px solid #FFFFFF;
+		padding: 20px;
+		margin: 20px;
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.1);
+	}
+	
+	.settings-title {
+		font-size: 18px;
+		color: #9C27B0;
+		font-weight: bold;
+		margin-bottom: 15px;
+		text-align: center;
+	}
+	
+	.difficulty-buttons {
+		flex-direction: row;
+		justify-content: space-around;
+		align-items: center;
+	}
+	
+	.difficulty-button {
+		flex: 1;
+		height: 50px;
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 12px;
+		border: 3px solid #FFFFFF;
+		margin: 0 5px;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.1), 0px 2px 0px rgba(0,0,0,0.05);
+	}
+	
+	.difficulty-button:active {
+		transform: translateY(2px);
+		box-shadow: 0px 2px 0px rgba(0,0,0,0.05), 0px 1px 0px rgba(0,0,0,0.02);
+	}
+	
+	.difficulty-button-active {
+		background: linear-gradient(135deg, #BA68C8 0%, #CE93D8 100%);
+		border-color: #9C27B0;
+	}
+	
+	.difficulty-button-text {
+		font-size: 18px;
+		font-weight: bold;
+		color: #9C27B0;
+	}
+	
+	.difficulty-button-active .difficulty-button-text {
+		color: #FFFFFF;
+		text-shadow: 1px 1px 0px rgba(0,0,0,0.2);
 	}
 </style>
 

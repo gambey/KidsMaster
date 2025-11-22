@@ -108,7 +108,7 @@
 			maxNumCnt:3, //最大待输入数字数量
 			}
 		},
-		onLoad() {
+		onLoad(options: OnLoadOptions) {
 			// 加载最高记录
 			try {
 				const savedScore = uni.getStorageSync('numhearingHighestScore')
@@ -120,6 +120,36 @@
 				}
 			} catch (e) {
 				// 忽略错误
+			}
+			
+			// 从URL参数读取难度设置
+			const difficultyParam = options["difficulty"]
+			if (difficultyParam != null) {
+				const diff = difficultyParam.toString()
+				if (diff === 'easy') {
+					this.gameLevel = 2 // easy: 间隔 3000ms
+				} else if (diff === 'normal') {
+					this.gameLevel = 1 // normal: 间隔 2000ms (默认)
+				} else if (diff === 'hard') {
+					this.gameLevel = 0 // hard: 间隔 1000ms
+				}
+			} else {
+				// 如果没有URL参数，从本地存储读取
+				try {
+					const savedDifficulty = uni.getStorageSync('numhearingDifficulty')
+					if (savedDifficulty != null && savedDifficulty != "") {
+						const diff = savedDifficulty.toString()
+						if (diff === 'easy') {
+							this.gameLevel = 2
+						} else if (diff === 'normal') {
+							this.gameLevel = 1
+						} else if (diff === 'hard') {
+							this.gameLevel = 0
+						}
+					}
+				} catch (e) {
+					// 忽略错误，使用默认值
+				}
 			}
 		},
 		onHide() {
@@ -345,6 +375,7 @@
 	}
 	
 	.number-row {
+		height: 100px;
 		flex-direction: row;
 		justify-content: center;
 		align-items: center;
