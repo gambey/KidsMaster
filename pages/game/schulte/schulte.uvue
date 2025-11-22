@@ -3,26 +3,6 @@
 		<view class="header">
 			<text class="title">🧩 舒尔特方格</text>
 		</view>
-		
-		<view class="game-info-bar" v-if="!gameStarted">
-			<text class="info-text">按照 1 → {{ totalNumbers }} 的顺序点击数字</text>
-		</view>
-		
-		<view class="settings-container" v-if="!gameStarted">
-			<text class="settings-title">选择难度：</text>
-			<view class="size-buttons">
-				<view 
-					class="size-button" 
-					v-for="size in [3, 4, 5, 6, 7, 8, 9]" 
-					:key="size"
-					:class="{ 'size-button-active': gridSize === size }"
-					@click="setGridSize(size)"
-				>
-					<text class="size-button-text">{{ size }}×{{ size }}</text>
-				</view>
-			</view>
-		</view>
-		
 		<view class="game-info-bar" v-if="gameStarted && !gameFinished">
 			<text class="timer-text">⏱️ 时间: {{ formatTime(elapsedTime) }}</text>
 			<text class="current-text">当前: {{ currentNumber }}/{{ totalNumbers }}</text>
@@ -46,13 +26,7 @@
 				</view>
 			</view>
 		</view>
-		
-		<view class="button-container" v-if="!gameStarted">
-			<view class="start-button" @click="startGame">
-				<text class="button-text">🚀 开始游戏</text>
-			</view>
-		</view>
-		
+
 		<view class="button-container" v-if="gameFinished">
 			<view class="restart-button" @click="restartGame">
 				<text class="button-text">🔄 再来一次</text>
@@ -87,18 +61,28 @@
 			}
 		},
 		onLoad(options: OnLoadOptions) {
-			// 从本地存储读取用户设置的阶数
-			try {
-				const savedSize = uni.getStorageSync('schulteGridSize')
-				if (savedSize != null && savedSize != "") {
-					const size = savedSize as number
-					if (size >= 3 && size <= 9) {
-						this.gridSize = size as number
-						this.updateGridConfig()
-					}
+			// 优先从URL参数读取难度设置
+			const gridSizeParam = options["gridSize"]
+			if (gridSizeParam != null) {
+				const size = parseInt(gridSizeParam.toString())
+				if (!isNaN(size) && size >= 3 && size <= 9) {
+					this.gridSize = size
+					this.updateGridConfig()
 				}
-			} catch (e) {
-				// 忽略错误，使用默认值
+			} else {
+				// 如果没有URL参数，从本地存储读取用户设置的阶数
+				try {
+					const savedSize = uni.getStorageSync('schulteGridSize')
+					if (savedSize != null && savedSize != "") {
+						const size = parseInt(savedSize.toString())
+						if (!isNaN(size) && size >= 3 && size <= 9) {
+							this.gridSize = size
+							this.updateGridConfig()
+						}
+					}
+				} catch (e) {
+					// 忽略错误，使用默认值
+				}
 			}
 			
 			// 检查是否需要自动开始游戏
@@ -124,16 +108,6 @@
 			this.grid = []
 		},
 		methods: {
-			setGridSize(size: number) {
-				this.gridSize = size
-				this.updateGridConfig()
-				// 保存到本地存储
-				try {
-					uni.setStorageSync('schulteGridSize', size)
-				} catch (e) {
-					// 忽略错误
-				}
-			},
 			updateGridConfig() {
 				this.totalNumbers = this.gridSize * this.gridSize
 				// 根据阶数动态调整单元格大小和字体大小
@@ -324,63 +298,6 @@
 		font-weight: bold;
 		text-align: center;
 		flex: 1;
-	}
-	
-	.settings-container {
-		background: rgba(255, 255, 255, 0.8);
-		border-radius: 15px;
-		border: 3px solid #FFFFFF;
-		padding: 20px;
-		margin-bottom: 20px;
-		box-shadow: 0px 4px 0px rgba(0,0,0,0.1);
-	}
-	
-	.settings-title {
-		font-size: 18px;
-		color: #4ECDC4;
-		font-weight: bold;
-		margin-bottom: 15px;
-		text-align: center;
-	}
-	
-	.size-buttons {
-		flex-direction: row;
-		flex-wrap: wrap;
-		justify-content: center;
-		align-items: center;
-	}
-	
-	.size-button {
-		min-width: 70px;
-		height: 50px;
-		background: rgba(255, 255, 255, 0.9);
-		border-radius: 12px;
-		border: 3px solid #FFFFFF;
-		margin: 5px;
-		align-items: center;
-		justify-content: center;
-		box-shadow: 0px 4px 0px rgba(0,0,0,0.1), 0px 2px 0px rgba(0,0,0,0.05);
-	}
-	
-	.size-button:active {
-		transform: translateY(2px);
-		box-shadow: 0px 2px 0px rgba(0,0,0,0.05), 0px 1px 0px rgba(0,0,0,0.02);
-	}
-	
-	.size-button-active {
-		background: linear-gradient(135deg, #4ECDC4 0%, #95E1D3 100%);
-		border-color: #4ECDC4;
-	}
-	
-	.size-button-text {
-		font-size: 16px;
-		font-weight: bold;
-		color: #4ECDC4;
-	}
-	
-	.size-button-active .size-button-text {
-		color: #FFFFFF;
-		text-shadow: 1px 1px 0px rgba(0,0,0,0.2);
 	}
 	
 	.grid-container {

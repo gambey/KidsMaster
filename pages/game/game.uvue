@@ -34,7 +34,7 @@
 			const games: GameItem[] = [
 				{ id: 1, name: "舒尔特方格", emoji: "🧩", description: "快速寻找到数字，提升专注能力" },
 				{ id: "2", name: "听数挑战", emoji: "🎧", description: "听数字并正确输入，提升听觉记忆" },
-				{ id: "3", name: "字母冒险", emoji: "🔤", description: "在冒险中学习字母，寓教于乐" },
+				{ id: "3", name: "冥想游戏", emoji: "🔤", description: "在冒险中学习字母，寓教于乐" },
 				{ id: "4", name: "形状识别", emoji: "⭐", description: "认识各种形状，开发空间想象力" },
 				{ id: "5", name: "记忆挑战", emoji: "🧠", description: "挑战记忆力，锻炼大脑" },
 				{ id: "6", name: "音乐节奏", emoji: "🎵", description: "跟随节奏，培养音乐感" }
@@ -53,20 +53,40 @@
 		},
 		methods: {
 			goToGameDetail(game: GameItem) {
-				// 根据游戏ID直接跳转到对应的游戏页面
+				// 根据游戏ID跳转到对应的详情页面
 				const gameId = game.id
-				if (gameId === "1" || game.name === "舒尔特方格" || game.name.includes("舒尔特")) {
-					// 舒尔特方格 - 直接跳转到游戏页面并自动开始
+				if (gameId === 1 || gameId === "1" || game.name === "舒尔特方格" || game.name.includes("舒尔特")) {
+					// 舒尔特方格 - 跳转到专属详情页
 					uni.navigateTo({
-						url: '/pages/game/schulte/schulte?autoStart=true'
+						url: '/pages/game/detail/schulte-detail'
 					})
 				} else if (gameId === "2" || game.name === "听数挑战" || game.name.includes("听数")) {
-					// 听数挑战 - 直接跳转到游戏页面
+					// 听数挑战 - 跳转到专属详情页
 					uni.navigateTo({
-						url: '/pages/game/numhearing/numhearing'
+						url: '/pages/game/detail/numhearing-detail'
+					})
+				} else if (gameId === "3" || game.name === "冥想游戏" || game.name.includes("冥想")) {
+					// 冥想游戏 - 跳转到专属详情页
+					uni.navigateTo({
+						url: '/pages/game/detail/meditation-detail'
+					})
+				} else if (gameId === "4" || game.name === "形状识别" || game.name.includes("形状")) {
+					// 形状识别 - 跳转到专属详情页
+					uni.navigateTo({
+						url: '/pages/game/detail/shape-detail'
+					})
+				} else if (gameId === "5" || game.name === "记忆挑战" || game.name.includes("记忆")) {
+					// 记忆挑战 - 跳转到专属详情页
+					uni.navigateTo({
+						url: '/pages/game/detail/memory-detail'
+					})
+				} else if (gameId === "6" || game.name === "音乐节奏" || game.name.includes("音乐")) {
+					// 音乐节奏 - 跳转到专属详情页
+					uni.navigateTo({
+						url: '/pages/game/detail/music-detail'
 					})
 				} else {
-					// 其他游戏暂时跳转到详情页面
+					// 其他游戏跳转到通用详情页面
 					uni.navigateTo({
 						url: `/pages/game/detail/detail?id=${game.id}&name=${encodeURIComponent(game.name)}&emoji=${encodeURIComponent(game.emoji)}&description=${encodeURIComponent(game.description)}`
 					})

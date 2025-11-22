@@ -14,10 +14,46 @@
 				"navigationStyle": "custom"
 			}
 		},
+	
 		{
-			"path": "pages/game/detail/detail",
+			"path": "pages/game/detail/schulte-detail",
 			"style": {
-				"navigationBarTitleText": "游戏详情",
+				"navigationBarTitleText": "舒尔特方格",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/game/detail/numhearing-detail",
+			"style": {
+				"navigationBarTitleText": "听数挑战",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/game/detail/meditation-detail",
+			"style": {
+				"navigationBarTitleText": "冥想游戏",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/game/detail/shape-detail",
+			"style": {
+				"navigationBarTitleText": "形状识别",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/game/detail/memory-detail",
+			"style": {
+				"navigationBarTitleText": "记忆挑战",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/game/detail/music-detail",
+			"style": {
+				"navigationBarTitleText": "音乐节奏",
 				"navigationStyle": "custom"
 			}
 		},
