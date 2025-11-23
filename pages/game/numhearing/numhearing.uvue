@@ -105,7 +105,7 @@
 			audioTimer: 0,
 			countdownTimer: 0,
 			numberPositions: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-			numberPlayTimeInterval:[1000,2000,3000],//游戏播报数字间隔时间，代表游戏难度。
+			numberPlayTimeInterval:[700,1000,1500],//游戏播报数字间隔时间，代表游戏难度。
 			gameLevel:0, //0:hard 1:normal 2:easy
 			maxNumCnt:10, //最大待输入数字数量
 			
