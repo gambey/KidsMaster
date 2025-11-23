@@ -1,0 +1,400 @@
+<template>
+	<view class="container">
+		<view class="header">
+			<view class="back-button" @click="goBack">
+				<text class="back-icon">←</text>
+			</view>
+			<text class="title">🎵 节拍器</text>
+		</view>
+		
+		<view class="content">
+			<view class="bpm-display">
+				<text class="bpm-label">BPM</text>
+				<text class="bpm-value">{{ bpm }}</text>
+			</view>
+			
+			<view class="control-panel">
+				<view class="bpm-control">
+					<view class="bpm-button" @click="decreaseBpm">
+						<text class="bpm-button-text">−</text>
+					</view>
+					<view class="bpm-input-wrapper">
+						<input 
+							class="bpm-input" 
+							type="number" 
+							v-model="bpm" 
+							@input="onBpmInput"
+						/>
+					</view>
+					<view class="bpm-button" @click="increaseBpm">
+						<text class="bpm-button-text">+</text>
+					</view>
+				</view>
+				
+				<view class="preset-buttons">
+					<view 
+						class="preset-button" 
+						v-for="preset in bpmPresets" 
+						:key="preset"
+						@click="setBpm(preset)"
+					>
+						<text class="preset-text">{{ preset }}</text>
+					</view>
+				</view>
+			</view>
+			
+			<view class="play-button-wrapper">
+				<view class="play-button" @click="toggleMetronome">
+					<text class="play-icon">{{ isPlaying ? '⏸️' : '▶️' }}</text>
+				</view>
+			</view>
+			
+			<view class="beat-indicator" v-if="isPlaying">
+				<view class="beat-circle" :class="{ 'beat-active': isBeat }"></view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script lang="uts">
+	export default {
+		data() {
+			return {
+				bpm: 120,
+				isPlaying: false,
+				isBeat: false,
+				metronomeTimer: 0,
+				beatTimer: 0,
+				bpmPresets: [60, 80, 100, 120, 140, 160]
+			}
+		},
+		onLoad() {
+			// 从本地存储读取保存的BPM
+			try {
+				const savedBpm = uni.getStorageSync('metronomeBpm')
+				if (savedBpm != null && savedBpm != "") {
+					const bpmValue = parseInt(savedBpm.toString())
+					if (!isNaN(bpmValue) && bpmValue >= 40 && bpmValue <= 200) {
+						this.bpm = bpmValue
+					}
+				}
+			} catch (e) {
+				// 忽略错误
+			}
+		},
+		onHide() {
+			this.stopMetronome()
+		},
+		onUnload() {
+			this.stopMetronome()
+		},
+		methods: {
+			onBpmInput(e: any) {
+				const value = parseInt(e.detail.value)
+				if (!isNaN(value) && value >= 40 && value <= 200) {
+					this.bpm = value
+					this.saveBpm()
+					if (this.isPlaying) {
+						this.restartMetronome()
+					}
+				}
+			},
+			increaseBpm() {
+				if (this.bpm < 200) {
+					this.bpm++
+					this.saveBpm()
+					if (this.isPlaying) {
+						this.restartMetronome()
+					}
+				}
+			},
+			decreaseBpm() {
+				if (this.bpm > 40) {
+					this.bpm--
+					this.saveBpm()
+					if (this.isPlaying) {
+						this.restartMetronome()
+					}
+				}
+			},
+			setBpm(value: number) {
+				this.bpm = value
+				this.saveBpm()
+				if (this.isPlaying) {
+					this.restartMetronome()
+				}
+			},
+			saveBpm() {
+				try {
+					uni.setStorageSync('metronomeBpm', this.bpm)
+				} catch (e) {
+					// 忽略错误
+				}
+			},
+			toggleMetronome() {
+				if (this.isPlaying) {
+					this.stopMetronome()
+				} else {
+					this.startMetronome()
+				}
+			},
+			startMetronome() {
+				this.isPlaying = true
+				const interval = Math.floor(60000 / this.bpm) // 每分钟的毫秒数除以BPM
+				
+				// 立即播放第一拍
+				this.playBeat()
+				
+				// 设置定时器
+				this.metronomeTimer = setInterval(() => {
+					this.playBeat()
+				}, interval) as number
+			},
+			stopMetronome() {
+				this.isPlaying = false
+				if (this.metronomeTimer != 0) {
+					clearInterval(this.metronomeTimer)
+					this.metronomeTimer = 0
+				}
+				if (this.beatTimer != 0) {
+					clearTimeout(this.beatTimer)
+					this.beatTimer = 0
+				}
+				this.isBeat = false
+			},
+			restartMetronome() {
+				this.stopMetronome()
+				this.startMetronome()
+			},
+			playBeat() {
+				// 视觉反馈
+				this.isBeat = true
+				this.beatTimer = setTimeout(() => {
+					this.isBeat = false
+				}, 100) as number
+				
+				// 振动反馈
+				try {
+					uni.vibrateShort({
+						type: 'light'
+					})
+				} catch (e) {
+					// 忽略振动失败
+				}
+			},
+			goBack() {
+				this.stopMetronome()
+				uni.navigateBack()
+			}
+		}
+	}
+</script>
+
+<style>
+	.container {
+		flex: 1;
+		background: linear-gradient(135deg, #FFB74D 0%, #FFA726 100%);
+		padding: 20px;
+	}
+	
+	.header {
+		margin-top: 20px;
+		margin-bottom: 30px;
+		flex-direction: row;
+		align-items: center;
+		position: relative;
+	}
+	
+	.back-button {
+		width: 50px;
+		height: 50px;
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 25px;
+		border: 3px solid #FFFFFF;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.15), 0px 2px 0px rgba(0,0,0,0.1);
+		position: absolute;
+		left: 0;
+		z-index: 10;
+	}
+	
+	.back-button:active {
+		transform: translateY(2px);
+		box-shadow: 0px 2px 0px rgba(0,0,0,0.1), 0px 1px 0px rgba(0,0,0,0.05);
+	}
+	
+	.back-icon {
+		font-size: 24px;
+		color: #FF9800;
+		font-weight: bold;
+	}
+	
+	.title {
+		flex: 1;
+		font-size: 32px;
+		font-weight: bold;
+		color: #FFFFFF;
+		text-align: center;
+		text-shadow: 2px 2px 0px #FF6B6B, 4px 4px 0px rgba(0,0,0,0.1);
+	}
+	
+	.content {
+		flex: 1;
+		align-items: center;
+		justify-content: center;
+		padding: 20px;
+	}
+	
+	.bpm-display {
+		align-items: center;
+		margin-bottom: 40px;
+	}
+	
+	.bpm-label {
+		font-size: 24px;
+		color: #FFFFFF;
+		font-weight: bold;
+		text-shadow: 2px 2px 0px rgba(0,0,0,0.2);
+		margin-bottom: 10px;
+	}
+	
+	.bpm-value {
+		font-size: 72px;
+		color: #FFFFFF;
+		font-weight: bold;
+		text-shadow: 3px 3px 0px rgba(0,0,0,0.3);
+	}
+	
+	.control-panel {
+		width: 100%;
+		align-items: center;
+		margin-bottom: 40px;
+	}
+	
+	.bpm-control {
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		margin-bottom: 30px;
+	}
+	
+	.bpm-button {
+		width: 60px;
+		height: 60px;
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 30px;
+		border: 3px solid #FFFFFF;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0px 6px 0px rgba(0,0,0,0.15), 0px 3px 0px rgba(0,0,0,0.1);
+		margin: 0 15px;
+	}
+	
+	.bpm-button:active {
+		transform: translateY(2px);
+		box-shadow: 0px 3px 0px rgba(0,0,0,0.1), 0px 1px 0px rgba(0,0,0,0.05);
+	}
+	
+	.bpm-button-text {
+		font-size: 36px;
+		color: #FF9800;
+		font-weight: bold;
+	}
+	
+	.bpm-input-wrapper {
+		width: 120px;
+		height: 70px;
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 15px;
+		border: 3px solid #FFFFFF;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0px 6px 0px rgba(0,0,0,0.15), 0px 3px 0px rgba(0,0,0,0.1);
+	}
+	
+	.bpm-input {
+		width: 100%;
+		height: 100%;
+		font-size: 32px;
+		color: #FF9800;
+		font-weight: bold;
+		text-align: center;
+	}
+	
+	.preset-buttons {
+		flex-direction: row;
+		flex-wrap: wrap;
+		justify-content: center;
+		width: 100%;
+	}
+	
+	.preset-button {
+		min-width: 80px;
+		height: 50px;
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 12px;
+		border: 3px solid #FFFFFF;
+		align-items: center;
+		justify-content: center;
+		margin: 5px;
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.15), 0px 2px 0px rgba(0,0,0,0.1);
+	}
+	
+	.preset-button:active {
+		transform: translateY(2px);
+		box-shadow: 0px 2px 0px rgba(0,0,0,0.1), 0px 1px 0px rgba(0,0,0,0.05);
+	}
+	
+	.preset-text {
+		font-size: 18px;
+		color: #FF9800;
+		font-weight: bold;
+	}
+	
+	.play-button-wrapper {
+		margin-top: 40px;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.play-button {
+		width: 120px;
+		height: 120px;
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 60px;
+		border: 4px solid #FFFFFF;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0px 8px 0px rgba(0,0,0,0.2), 0px 4px 0px rgba(0,0,0,0.15);
+	}
+	
+	.play-button:active {
+		transform: translateY(2px);
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.15), 0px 2px 0px rgba(0,0,0,0.1);
+	}
+	
+	.play-icon {
+		font-size: 60px;
+	}
+	
+	.beat-indicator {
+		margin-top: 30px;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.beat-circle {
+		width: 100px;
+		height: 100px;
+		border-radius: 50px;
+		background: rgba(255, 255, 255, 0.3);
+		border: 4px solid #FFFFFF;
+	}
+	
+	.beat-active {
+		background: rgba(255, 255, 255, 0.9);
+		transform: scale(1.2);
+	}
+</style>
+

@@ -84,6 +84,27 @@
 				"navigationBarTitleText": "我的",
 				"navigationStyle": "custom"
 			}
+		},
+		{
+			"path": "pages/mine/tools/tools",
+			"style": {
+				"navigationBarTitleText": "工具",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/mine/tools/pomodoro",
+			"style": {
+				"navigationBarTitleText": "番茄钟",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/mine/tools/metronome",
+			"style": {
+				"navigationBarTitleText": "节拍器",
+				"navigationStyle": "custom"
+			}
 		}
 	],
 	"globalStyle": {

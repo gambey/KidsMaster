@@ -1,0 +1,62 @@
+/**
+ * 游戏资源使用示例
+ * 本文件仅作为参考，展示如何在游戏中使用资源路径
+ */
+
+// 导入资源工具类
+// import { GameResources, getGameResourcePath } from './game-resources.uts'
+
+/**
+ * 示例1: 在听数挑战游戏中使用数字播报音频
+ */
+export function exampleNumhearingAudio() {
+	// 方式1: 直接使用资源对象
+	// const audioPath = GameResources.numhearing.getNumberAudio(5) // 获取数字5的播报音频
+	
+	// 方式2: 使用工具函数
+	// const audioPath = getGameResourcePath('numhearing', 'audio', 'number_5.mp3')
+	
+	// 播放音频示例
+	// const audioContext = uni.createInnerAudioContext()
+	// audioContext.src = audioPath
+	// audioContext.play()
+}
+
+/**
+ * 示例2: 在舒尔特方格游戏中使用音效
+ */
+export function exampleSchulteAudio() {
+	// 点击音效
+	// const clickSound = GameResources.schulte.audio.click
+	
+	// 正确音效
+	// const correctSound = GameResources.schulte.audio.correct
+	
+	// 播放音效示例
+	// const audioContext = uni.createInnerAudioContext()
+	// audioContext.src = clickSound
+	// audioContext.play()
+}
+
+/**
+ * 示例3: 使用图片资源
+ */
+export function exampleImageResource() {
+	// 获取游戏背景图
+	// const bgImage = GameResources.numhearing.images.background
+	
+	// 在模板中使用
+	// <image src="{{ bgImage }}"></image>
+}
+
+/**
+ * 示例4: 使用视频资源
+ */
+export function exampleVideoResource() {
+	// 获取教程视频
+	// const tutorialVideo = GameResources.schulte.videos.tutorial
+	
+	// 在模板中使用
+	// <video src="{{ tutorialVideo }}"></video>
+}
+

@@ -1,0 +1,338 @@
+<template>
+	<view class="container">
+		<view class="header">
+			<view class="back-button" @click="goBack">
+				<text class="back-icon">←</text>
+			</view>
+			<text class="title">🔧 工具</text>
+		</view>
+		
+		<view class="content">
+			<view 
+				class="tool-card" 
+				v-for="(tool, index) in tools" 
+				:key="tool.id"
+				:class="{ 'card-dragging': draggingIndex === index }"
+				:style="getCardStyle(index)"
+				@touchstart="onTouchStart($event, index)"
+				@touchmove="onTouchMove($event, index)"
+				@touchend="onTouchEnd($event, index)"
+				@click="handleToolClick(tool)"
+			>
+				<view class="card-icon">
+					<text class="icon-text">{{ tool.icon }}</text>
+				</view>
+				<text class="card-text">{{ tool.name }}</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script lang="uts">
+	type ToolItem = {
+		id: string
+		name: string
+		icon: string
+	}
+	
+	export default {
+		data() {
+			return {
+				tools: [] as ToolItem[],
+				draggingIndex: -1,
+				dragStartY: 0,
+				dragCurrentY: 0,
+				longPressTimer: 0,
+				isDragging: false,
+				originalOrder: [] as ToolItem[]
+			}
+		},
+		onLoad() {
+			this.loadTools()
+		},
+		methods: {
+			loadTools() {
+				// 默认工具列表
+				const defaultTools: ToolItem[] = [
+					{ id: 'pomodoro', name: '番茄钟', icon: '🍅' },
+					{ id: 'metronome', name: '节拍器', icon: '🎵' }
+				]
+				
+				// 从本地存储读取保存的顺序
+				try {
+					const savedOrder = uni.getStorageSync('toolsOrder')
+					if (savedOrder != null && savedOrder != "") {
+						const order = JSON.parse(savedOrder.toString()) as string[]
+						// 根据保存的顺序重新排列工具
+						const orderedTools: ToolItem[] = []
+						for (const id of order) {
+							const tool = defaultTools.find(t => t.id === id)
+							if (tool != null) {
+								orderedTools.push(tool)
+							}
+						}
+						// 添加未在顺序中的工具（兼容性处理）
+						for (const tool of defaultTools) {
+							if (!orderedTools.find(t => t.id === tool.id)) {
+								orderedTools.push(tool)
+							}
+						}
+						this.tools = orderedTools
+					} else {
+						this.tools = defaultTools
+					}
+				} catch (e) {
+					// 如果读取失败，使用默认顺序
+					this.tools = defaultTools
+				}
+				this.originalOrder = JSON.parse(JSON.stringify(this.tools))
+			},
+			saveToolsOrder() {
+				// 保存工具顺序到本地存储
+				try {
+					const order = this.tools.map(tool => tool.id)
+					uni.setStorageSync('toolsOrder', JSON.stringify(order))
+				} catch (e) {
+					console.error('保存工具顺序失败:', e)
+				}
+			},
+			onTouchStart(e: any, index: number) {
+				if (this.isDragging) {
+					return
+				}
+				
+				const touch = e.touches[0]
+				if (touch == null) {
+					return
+				}
+				
+				this.dragStartY = touch.clientY
+				this.dragCurrentY = touch.clientY
+				
+				// 启动长按计时器（500ms长按触发拖动）
+				this.longPressTimer = setTimeout(() => {
+					this.startDragging(index)
+				}, 500) as number
+			},
+			onTouchMove(e: any, index: number) {
+				if (!this.isDragging) {
+					// 如果移动距离较大，取消长按计时器
+					const touch = e.touches[0]
+					if (touch != null) {
+						const moveDistance = Math.abs(touch.clientY - this.dragStartY)
+						if (moveDistance > 10) {
+							clearTimeout(this.longPressTimer)
+							this.longPressTimer = 0
+						}
+					}
+					return
+				}
+				
+				const touch = e.touches[0]
+				if (touch == null) {
+					return
+				}
+				
+				this.dragCurrentY = touch.clientY
+				
+				// 计算应该插入的位置
+				// 卡片高度150px + 底部间距20px = 170px
+				const cardHeight = 170
+				const relativeY = touch.clientY - this.dragStartY
+				const rowOffset = Math.round(relativeY / cardHeight)
+				const targetIndex = index + rowOffset
+				
+				// 限制在有效范围内
+				if (targetIndex >= 0 && targetIndex < this.tools.length && targetIndex !== this.draggingIndex) {
+					this.moveCard(this.draggingIndex, targetIndex)
+				}
+			},
+			onTouchEnd(e: any, index: number) {
+				// 清除长按计时器
+				if (this.longPressTimer != 0) {
+					clearTimeout(this.longPressTimer)
+					this.longPressTimer = 0
+				}
+				
+				if (this.isDragging) {
+					this.stopDragging()
+					// 保存新的顺序
+					this.saveToolsOrder()
+				}
+			},
+			startDragging(index: number) {
+				this.isDragging = true
+				this.draggingIndex = index
+				// 振动反馈（某些平台可能不支持，使用try-catch）
+				try {
+					uni.vibrateShort({
+						type: 'medium'
+					})
+				} catch (e) {
+					// 忽略振动失败
+				}
+			},
+			stopDragging() {
+				this.isDragging = false
+				this.draggingIndex = -1
+				this.dragStartY = 0
+				this.dragCurrentY = 0
+			},
+			moveCard(fromIndex: number, toIndex: number) {
+				if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= this.tools.length || toIndex >= this.tools.length) {
+					return
+				}
+				
+				// 创建新数组避免直接修改
+				const newTools: ToolItem[] = []
+				for (let i = 0; i < this.tools.length; i++) {
+					newTools.push(this.tools[i])
+				}
+				
+				// 移动元素
+				const [movedItem] = newTools.splice(fromIndex, 1)
+				newTools.splice(toIndex, 0, movedItem)
+				
+				this.tools = newTools
+				this.draggingIndex = toIndex
+			},
+			getCardStyle(index: number): string {
+				if (this.isDragging && this.draggingIndex === index) {
+					const offset = this.dragCurrentY - this.dragStartY
+					return `transform: translateY(${offset}px); z-index: 999; opacity: 0.9;`
+				}
+				return ''
+			},
+			handleToolClick(tool: ToolItem) {
+				if (this.isDragging) {
+					return
+				}
+				
+				// 根据工具ID跳转到对应页面
+				switch (tool.id) {
+					case 'pomodoro':
+						uni.navigateTo({
+							url: '/pages/mine/tools/pomodoro'
+						})
+						break
+					case 'metronome':
+						uni.navigateTo({
+							url: '/pages/mine/tools/metronome'
+						})
+						break
+					default:
+						break
+				}
+			},
+			goBack() {
+				uni.navigateBack()
+			}
+		}
+	}
+</script>
+
+<style>
+	.container {
+		flex: 1;
+		background: linear-gradient(135deg, #FFB74D 0%, #FFA726 100%);
+		padding: 20px;
+	}
+	
+	.header {
+		margin-top: 20px;
+		margin-bottom: 30px;
+		flex-direction: row;
+		align-items: center;
+		position: relative;
+	}
+	
+	.back-button {
+		width: 50px;
+		height: 50px;
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 25px;
+		border: 3px solid #FFFFFF;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.15), 0px 2px 0px rgba(0,0,0,0.1);
+		position: absolute;
+		left: 0;
+		z-index: 10;
+	}
+	
+	.back-button:active {
+		transform: translateY(2px);
+		box-shadow: 0px 2px 0px rgba(0,0,0,0.1), 0px 1px 0px rgba(0,0,0,0.05);
+	}
+	
+	.back-icon {
+		font-size: 24px;
+		color: #FF9800;
+		font-weight: bold;
+	}
+	
+	.title {
+		flex: 1;
+		font-size: 32px;
+		font-weight: bold;
+		color: #FFFFFF;
+		text-align: center;
+		text-shadow: 2px 2px 0px #FF6B6B, 4px 4px 0px rgba(0,0,0,0.1);
+	}
+	
+	.content {
+		flex: 1;
+		padding: 20px;
+		flex-direction: row;
+		flex-wrap: wrap;
+		justify-content: space-around;
+		align-items: flex-start;
+	}
+	
+	.tool-card {
+		width: 45%;
+		height: 180px;
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 20px;
+		border: 4px solid #FFFFFF;
+		margin-bottom: 20px;
+		align-items: center;
+		justify-content: center;
+		position: relative;
+		box-shadow: 0px 6px 0px rgba(0,0,0,0.15), 0px 3px 0px rgba(0,0,0,0.1);
+	}
+	
+	.tool-card:active {
+		transform: translateY(2px);
+		box-shadow: 0px 3px 0px rgba(0,0,0,0.1), 0px 1px 0px rgba(0,0,0,0.05);
+	}
+	
+	.card-dragging {
+		box-shadow: 0px 8px 16px rgba(0,0,0,0.3), 0px 4px 8px rgba(0,0,0,0.2);
+		transform: scale(1.05);
+	}
+	
+	.card-icon {
+		width: 90px;
+		height: 90px;
+		border-radius: 45px;
+		background: linear-gradient(135deg, #FFE5B4 0%, #FFCCCB 100%);
+		border: 3px solid #FFFFFF;
+		align-items: center;
+		justify-content: center;
+		margin-bottom: 12px;
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.1), 0px 2px 0px rgba(0,0,0,0.05);
+	}
+	
+	.icon-text {
+		font-size: 50px;
+	}
+	
+	.card-text {
+		font-size: 18px;
+		color: #FF9800;
+		font-weight: bold;
+		text-shadow: 1px 1px 0px #FFFFFF;
+	}
+</style>
+

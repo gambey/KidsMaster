@@ -1,0 +1,172 @@
+/**
+ * 游戏资源路径工具类
+ * 提供统一的资源路径管理
+ */
+
+/**
+ * 游戏资源路径配置
+ */
+export const GameResources = {
+	/**
+	 * 舒尔特方格游戏资源
+	 */
+	schulte: {
+		audio: {
+			click: '/static/games/schulte/audio/click.mp3',
+			correct: '/static/games/schulte/audio/correct.mp3',
+			wrong: '/static/games/schulte/audio/wrong.mp3',
+			complete: '/static/games/schulte/audio/complete.mp3',
+			bgm: '/static/games/schulte/audio/bgm.mp3'
+		},
+		images: {
+			background: '/static/games/schulte/images/background.png',
+			cellBg: '/static/games/schulte/images/cell_bg.png',
+			cellClicked: '/static/games/schulte/images/cell_clicked.png'
+		},
+		videos: {
+			tutorial: '/static/games/schulte/videos/tutorial.mp4'
+		}
+	},
+	
+	/**
+	 * 听数挑战游戏资源
+	 */
+	numhearing: {
+		audio: {
+			number0: '/static/games/numhearing/audio/0.mp3',
+			number1: '/static/games/numhearing/audio/1.mp3',
+			number2: '/static/games/numhearing/audio/2.mp3',
+			number3: '/static/games/numhearing/audio/3.mp3',
+			number4: '/static/games/numhearing/audio/4.mp3',
+			number5: '/static/games/numhearing/audio/5.mp3',
+			number6: '/static/games/numhearing/audio/6.mp3',
+			number7: '/static/games/numhearing/audio/7.mp3',
+			number8: '/static/games/numhearing/audio/8.mp3',
+			number9: '/static/games/numhearing/audio/9.mp3',
+			click: '/static/games/numhearing/audio/click.mp3',
+			correct: '/static/games/numhearing/audio/correct.mp3',
+			wrong: '/static/games/numhearing/audio/wrong.mp3',
+			gameOver: '/static/games/numhearing/audio/game_over.mp3',
+			bgm: '/static/games/numhearing/audio/bgm.mp3',
+			cd:  '/static/games/numhearing/audio/countdown.mp3'
+		},
+		images: {
+			background: '/static/games/numhearing/images/background.png',
+			buttonNormal: '/static/games/numhearing/images/button_normal.png',
+			buttonPressed: '/static/games/numhearing/images/button_pressed.png'
+		},
+		videos: {
+			tutorial: '/static/games/numhearing/videos/tutorial.mp4'
+		},
+		/**
+		 * 获取数字播报音频路径
+		 * @param num 数字 (0-9)
+		 * @returns 音频文件路径
+		 */
+		getNumberAudio(num: number): string {
+			const numberAudios: string[] = [
+				this.audio.number0,
+				this.audio.number1,
+				this.audio.number2,
+				this.audio.number3,
+				this.audio.number4,
+				this.audio.number5,
+				this.audio.number6,
+				this.audio.number7,
+				this.audio.number8,
+				this.audio.number9
+			]
+			if (num >= 0 && num <= 9) {
+				return numberAudios[num]
+			}
+			return this.audio.number0
+		}
+	},
+	
+	/**
+	 * 冥想游戏资源
+	 */
+	meditation: {
+		audio: {
+			bgm: '/static/games/meditation/audio/bgm.mp3',
+			guideVoice: '/static/games/meditation/audio/guide_voice.mp3',
+			click: '/static/games/meditation/audio/click.mp3',
+			success: '/static/games/meditation/audio/success.mp3'
+		},
+		images: {
+			background: '/static/games/meditation/images/background.png'
+		},
+		videos: {
+			tutorial: '/static/games/meditation/videos/tutorial.mp4'
+		}
+	},
+	
+	/**
+	 * 形状识别游戏资源
+	 */
+	shape: {
+		audio: {
+			click: '/static/games/shape/audio/click.mp3',
+			correct: '/static/games/shape/audio/correct.mp3',
+			wrong: '/static/games/shape/audio/wrong.mp3',
+			bgm: '/static/games/shape/audio/bgm.mp3'
+		},
+		images: {
+			background: '/static/games/shape/images/background.png',
+			circle: '/static/games/shape/images/circle.png',
+			square: '/static/games/shape/images/square.png',
+			triangle: '/static/games/shape/images/triangle.png',
+			rectangle: '/static/games/shape/images/rectangle.png',
+			star: '/static/games/shape/images/star.png',
+			heart: '/static/games/shape/images/heart.png'
+		},
+		videos: {
+			tutorial: '/static/games/shape/videos/tutorial.mp4'
+		}
+	},
+	
+	/**
+	 * 记忆挑战游戏资源
+	 */
+	memory: {
+		audio: {
+			flip: '/static/games/memory/audio/flip.mp3',
+			match: '/static/games/memory/audio/match.mp3',
+			mismatch: '/static/games/memory/audio/mismatch.mp3',
+			bgm: '/static/games/memory/audio/bgm.mp3'
+		},
+		images: {
+			background: '/static/games/memory/images/background.png',
+			cardBack: '/static/games/memory/images/card_back.png'
+		},
+		videos: {
+			tutorial: '/static/games/memory/videos/tutorial.mp4'
+		}
+	},
+	
+	/**
+	 * 音乐节奏游戏资源
+	 */
+	music: {
+		audio: {
+			beat: '/static/games/music/audio/beat.mp3',
+			hit: '/static/games/music/audio/hit.mp3',
+			miss: '/static/games/music/audio/miss.mp3',
+			perfect: '/static/games/music/audio/perfect.mp3'
+		},
+		images: {
+			background: '/static/games/music/images/background.png'
+		},
+		videos: {
+			tutorial: '/static/games/music/videos/tutorial.mp4'
+		}
+	}
+}
+
+/**
+ * 资源路径工具函数
+ */
+export function getGameResourcePath(game: string, type: 'audio' | 'images' | 'videos', resource: string): string {
+	return `/static/games/${game}/${type}/${resource}`
+}
+

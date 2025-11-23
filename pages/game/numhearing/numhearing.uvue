@@ -90,6 +90,8 @@
 </template>
 
 <script lang="uts">
+	import { GameResources, getGameResourcePath } from '../../../utils/game-resources'
+	
 	export default {
 		data() {
 			return {
@@ -105,7 +107,9 @@
 			numberPositions: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
 			numberPlayTimeInterval:[1000,2000,3000],//游戏播报数字间隔时间，代表游戏难度。
 			gameLevel:0, //0:hard 1:normal 2:easy
-			maxNumCnt:3, //最大待输入数字数量
+			maxNumCnt:10, //最大待输入数字数量
+			
+			_audioContext: null as InnerAudioContext | null,
 			}
 		},
 		onLoad(options: OnLoadOptions) {
@@ -166,9 +170,16 @@
 				this.numberSequence = []
 				this.currentInputIndex = -1
 				
+				this._audioContext = uni.createInnerAudioContext()
+				
 				// 3秒倒计时
 				this.countdown = 3
 				this.countdownTimer = setInterval(() => {
+					//play ready audio
+					const audioPath = getGameResourcePath('numhearing','audio','countdown.mp3')
+					this._audioContext!.src = audioPath
+					this._audioContext?.play()
+					
 					this.countdown--
 					if (this.countdown <= 0) {
 						this.stopCountdown()
@@ -210,16 +221,21 @@
 			},
 			playNumberAudio(num: number) {
 				// 使用uni.showToast显示数字（实际项目中可以使用TTS）
-				uni.showToast({
+				/*uni.showToast({
 					title: `数字: ${num}`,
 					icon:'none',
 					duration: 500,//this.numberPlayTimeInterval[this.gameLevel]>>1,
 					position: 'top',
 					
-				})
+				})*/
 				
 				// 这里可以添加实际的音频播放
 				// 例如使用 uni.createInnerAudioContext() 播放预录制的音频
+				const audioPath = GameResources.numhearing.getNumberAudio(num)
+				console.log("now playing "+audioPath)
+				this._audioContext!.src = audioPath
+				this._audioContext!.play();
+				
 			},
 			handleNumberClick(num: number) {
 				if (!this.gameStarted || this.gameFinished) {
@@ -241,6 +257,7 @@
 			endGame() {
 				this.gameFinished = true
 				this.numberSequence = []
+				this._audioContext = null
 				this.stopGame()
 				// 更新最高记录
 				if (this.score > this.highestScore) {
@@ -268,11 +285,13 @@
 					}
 					this.audioTimer = 0
 				}
+				
 			},
 			restartGame() {
 				this.gameStarted = false
 				this.gameFinished = false
 				this.countdown = 0
+				this._audioContext = uni.createInnerAudioContext()
 			},
 		
 			goBack() {

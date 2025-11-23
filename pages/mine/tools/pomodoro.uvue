@@ -1,0 +1,395 @@
+<template>
+	<view class="container">
+		<view class="header">
+			<view class="back-button" @click="goBack">
+				<text class="back-icon">←</text>
+			</view>
+			<text class="title">🍅 番茄钟</text>
+		</view>
+		
+		<view class="content">
+			<view class="timer-display">
+				<text class="timer-text">{{ formatTime(remainingTime) }}</text>
+			</view>
+			
+			<view class="mode-selector">
+				<view 
+					class="mode-button" 
+					v-for="mode in modes" 
+					:key="mode.name"
+					:class="{ 'mode-active': currentMode === mode.name }"
+					@click="selectMode(mode.name)"
+				>
+					<text class="mode-text">{{ mode.name }}</text>
+					<text class="mode-duration">{{ mode.duration }}分钟</text>
+				</view>
+			</view>
+			
+			<view class="control-buttons">
+				<view class="control-button" @click="toggleTimer">
+					<text class="control-icon">{{ isRunning ? '⏸️' : '▶️' }}</text>
+					<text class="control-text">{{ isRunning ? '暂停' : '开始' }}</text>
+				</view>
+				<view class="control-button" @click="resetTimer">
+					<text class="control-icon">🔄</text>
+					<text class="control-text">重置</text>
+				</view>
+			</view>
+			
+			<view class="progress-bar">
+				<view class="progress-fill" :style="{ width: getProgressPercent() + '%' }"></view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script lang="uts">
+	type PomodoroMode = {
+		name: string
+		duration: number
+	}
+	
+	export default {
+		data() {
+			return {
+				modes: [
+					{ name: '工作', duration: 25 },
+					{ name: '短休息', duration: 5 },
+					{ name: '长休息', duration: 15 }
+				] as PomodoroMode[],
+				currentMode: '工作',
+				remainingTime: 25 * 60 * 1000, // 25分钟，单位：毫秒
+				totalTime: 25 * 60 * 1000,
+				isRunning: false,
+				timer: 0,
+				startTime: 0,
+				pausedTime: 0
+			}
+		},
+		onLoad() {
+			// 从本地存储读取保存的状态
+			this.loadState()
+		},
+		onHide() {
+			this.pauseTimer()
+			this.saveState()
+		},
+		onUnload() {
+			this.stopTimer()
+		},
+		methods: {
+			loadState() {
+				try {
+					const savedMode = uni.getStorageSync('pomodoroMode')
+					if (savedMode != null && savedMode != "") {
+						this.currentMode = savedMode.toString()
+					}
+					
+					const savedTime = uni.getStorageSync('pomodoroTime')
+					if (savedTime != null && savedTime != "") {
+						const time = parseInt(savedTime.toString())
+						if (!isNaN(time) && time > 0) {
+							this.remainingTime = time
+						}
+					}
+					
+					// 根据模式设置总时间
+					const mode = this.modes.find(m => m.name === this.currentMode)
+					if (mode != null) {
+						this.totalTime = mode.duration * 60 * 1000
+						if (this.remainingTime > this.totalTime) {
+							this.remainingTime = this.totalTime
+						}
+					}
+				} catch (e) {
+					// 忽略错误
+				}
+			},
+			saveState() {
+				try {
+					uni.setStorageSync('pomodoroMode', this.currentMode)
+					uni.setStorageSync('pomodoroTime', this.remainingTime)
+				} catch (e) {
+					// 忽略错误
+				}
+			},
+			selectMode(modeName: string) {
+				if (this.isRunning) {
+					uni.showToast({
+						title: '请先暂停计时器',
+						icon: 'none',
+						duration: 2000
+					})
+					return
+				}
+				
+				this.currentMode = modeName
+				const mode = this.modes.find(m => m.name === modeName)
+				if (mode != null) {
+					this.totalTime = mode.duration * 60 * 1000
+					this.remainingTime = this.totalTime
+					this.saveState()
+				}
+			},
+			toggleTimer() {
+				if (this.isRunning) {
+					this.pauseTimer()
+				} else {
+					this.startTimer()
+				}
+			},
+			startTimer() {
+				if (this.remainingTime <= 0) {
+					this.resetTimer()
+				}
+				
+				this.isRunning = true
+				this.startTime = Date.now() - (this.totalTime - this.remainingTime)
+				
+				this.timer = setInterval(() => {
+					const elapsed = Date.now() - this.startTime
+					this.remainingTime = this.totalTime - elapsed
+					
+					if (this.remainingTime <= 0) {
+						this.remainingTime = 0
+						this.completeTimer()
+					}
+				}, 100) as number
+			},
+			pauseTimer() {
+				this.isRunning = false
+				this.stopTimer()
+				this.saveState()
+			},
+			stopTimer() {
+				if (this.timer != 0) {
+					clearInterval(this.timer)
+					this.timer = 0
+				}
+			},
+			resetTimer() {
+				this.stopTimer()
+				this.isRunning = false
+				const mode = this.modes.find(m => m.name === this.currentMode)
+				if (mode != null) {
+					this.totalTime = mode.duration * 60 * 1000
+					this.remainingTime = this.totalTime
+				}
+				this.saveState()
+			},
+			completeTimer() {
+				this.stopTimer()
+				this.isRunning = false
+				
+				// 振动和提示
+				try {
+					uni.vibrateShort({
+						type: 'heavy'
+					})
+				} catch (e) {
+					// 忽略振动失败
+				}
+				
+				uni.showToast({
+					title: `${this.currentMode}时间到！`,
+					icon: 'success',
+					duration: 3000
+				})
+				
+				// 自动切换到下一个模式
+				if (this.currentMode === '工作') {
+					// 工作完成后切换到短休息
+					setTimeout(() => {
+						this.selectMode('短休息')
+					}, 1000)
+				} else {
+					// 休息完成后切换到工作
+					setTimeout(() => {
+						this.selectMode('工作')
+					}, 1000)
+				}
+			},
+			formatTime(ms: number): string {
+				const totalSeconds = Math.ceil(ms / 1000)
+				const minutes = Math.floor(totalSeconds / 60)
+				const seconds = totalSeconds % 60
+				const minStr = minutes < 10 ? '0' + minutes.toString() : minutes.toString()
+				const secStr = seconds < 10 ? '0' + seconds.toString() : seconds.toString()
+				return `${minStr}:${secStr}`
+			},
+			getProgressPercent(): number {
+				if (this.totalTime === 0) {
+					return 0
+				}
+				return ((this.totalTime - this.remainingTime) / this.totalTime) * 100
+			},
+			goBack() {
+				this.pauseTimer()
+				uni.navigateBack()
+			}
+		}
+	}
+</script>
+
+<style>
+	.container {
+		flex: 1;
+		background: linear-gradient(135deg, #FFB74D 0%, #FFA726 100%);
+		padding: 20px;
+	}
+	
+	.header {
+		margin-top: 20px;
+		margin-bottom: 30px;
+		flex-direction: row;
+		align-items: center;
+		position: relative;
+	}
+	
+	.back-button {
+		width: 50px;
+		height: 50px;
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 25px;
+		border: 3px solid #FFFFFF;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0px 4px 0px rgba(0,0,0,0.15), 0px 2px 0px rgba(0,0,0,0.1);
+		position: absolute;
+		left: 0;
+		z-index: 10;
+	}
+	
+	.back-button:active {
+		transform: translateY(2px);
+		box-shadow: 0px 2px 0px rgba(0,0,0,0.1), 0px 1px 0px rgba(0,0,0,0.05);
+	}
+	
+	.back-icon {
+		font-size: 24px;
+		color: #FF9800;
+		font-weight: bold;
+	}
+	
+	.title {
+		flex: 1;
+		font-size: 32px;
+		font-weight: bold;
+		color: #FFFFFF;
+		text-align: center;
+		text-shadow: 2px 2px 0px #FF6B6B, 4px 4px 0px rgba(0,0,0,0.1);
+	}
+	
+	.content {
+		flex: 1;
+		align-items: center;
+		justify-content: center;
+		padding: 20px;
+	}
+	
+	.timer-display {
+		align-items: center;
+		justify-content: center;
+		margin-bottom: 50px;
+	}
+	
+	.timer-text {
+		font-size: 80px;
+		color: #FFFFFF;
+		font-weight: bold;
+		text-shadow: 3px 3px 0px rgba(0,0,0,0.3);
+		font-family: 'Courier New', monospace;
+	}
+	
+	.mode-selector {
+		flex-direction: row;
+		justify-content: space-around;
+		width: 100%;
+		margin-bottom: 40px;
+	}
+	
+	.mode-button {
+		flex: 1;
+		height: 100px;
+		background: rgba(255, 255, 255, 0.7);
+		border-radius: 15px;
+		border: 3px solid #FFFFFF;
+		align-items: center;
+		justify-content: center;
+		margin: 0 5px;
+		box-shadow: 0px 6px 0px rgba(0,0,0,0.15), 0px 3px 0px rgba(0,0,0,0.1);
+	}
+	
+	.mode-button:active {
+		transform: translateY(2px);
+		box-shadow: 0px 3px 0px rgba(0,0,0,0.1), 0px 1px 0px rgba(0,0,0,0.05);
+	}
+	
+	.mode-active {
+		background: rgba(255, 255, 255, 0.95);
+		border-color: #FF9800;
+	}
+	
+	.mode-text {
+		font-size: 20px;
+		color: #FF9800;
+		font-weight: bold;
+		margin-bottom: 5px;
+	}
+	
+	.mode-duration {
+		font-size: 16px;
+		color: #FF9800;
+	}
+	
+	.control-buttons {
+		flex-direction: row;
+		justify-content: space-around;
+		width: 100%;
+		margin-bottom: 30px;
+	}
+	
+	.control-button {
+		width: 140px;
+		height: 70px;
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 20px;
+		border: 4px solid #FFFFFF;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0px 6px 0px rgba(0,0,0,0.15), 0px 3px 0px rgba(0,0,0,0.1);
+	}
+	
+	.control-button:active {
+		transform: translateY(2px);
+		box-shadow: 0px 3px 0px rgba(0,0,0,0.1), 0px 1px 0px rgba(0,0,0,0.05);
+	}
+	
+	.control-icon {
+		font-size: 32px;
+		margin-bottom: 5px;
+	}
+	
+	.control-text {
+		font-size: 18px;
+		color: #FF9800;
+		font-weight: bold;
+	}
+	
+	.progress-bar {
+		width: 90%;
+		height: 20px;
+		background: rgba(255, 255, 255, 0.3);
+		border-radius: 10px;
+		border: 2px solid #FFFFFF;
+		overflow: hidden;
+	}
+	
+	.progress-fill {
+		height: 100%;
+		background: linear-gradient(90deg, #FF6B6B 0%, #FF9800 100%);
+		border-radius: 10px;
+		transition: width 0.3s ease;
+	}
+</style>
+
