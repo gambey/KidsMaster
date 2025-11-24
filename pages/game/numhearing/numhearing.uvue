@@ -174,12 +174,14 @@
 				
 				// 3秒倒计时
 				this.countdown = 3
+				//第一次倒计时
+				this._audioContext!.src = getGameResourcePath('numhearing','audio','countdown.mp3')
+				this._audioContext?.play()
+				
 				this.countdownTimer = setInterval(() => {
 					//play ready audio
-					const audioPath = getGameResourcePath('numhearing','audio','countdown.mp3')
-					this._audioContext!.src = audioPath
+					this._audioContext!.src = getGameResourcePath('numhearing','audio','countdown.mp3')
 					this._audioContext?.play()
-					
 					this.countdown--
 					if (this.countdown <= 0) {
 						this.stopCountdown()
@@ -231,9 +233,23 @@
 				
 				// 这里可以添加实际的音频播放
 				// 例如使用 uni.createInnerAudioContext() 播放预录制的音频
-				const audioPath = GameResources.numhearing.getNumberAudio(num)
-				console.log("now playing "+audioPath)
-				this._audioContext!.src = audioPath
+				const numberAudios: string[] = [
+					'/static/games/numhearing/audio/0.mp3',
+					'/static/games/numhearing/audio/1.mp3',
+					'/static/games/numhearing/audio/2.mp3',
+					'/static/games/numhearing/audio/3.mp3',
+					'/static/games/numhearing/audio/4.mp3',
+					'/static/games/numhearing/audio/5.mp3',
+					'/static/games/numhearing/audio/6.mp3',
+					'/static/games/numhearing/audio/7.mp3',
+					'/static/games/numhearing/audio/8.mp3',
+					'/static/games/numhearing/audio/9.mp3'
+				]
+				if (num >= 0 && num <= 9) {
+					this._audioContext!.src = numberAudios[num]
+				} else {
+					this._audioContext!.src = numberAudios[0]
+				}
 				this._audioContext!.play();
 				
 			},

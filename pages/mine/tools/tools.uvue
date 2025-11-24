@@ -73,7 +73,8 @@
 						}
 						// 添加未在顺序中的工具（兼容性处理）
 						for (const tool of defaultTools) {
-							if (!orderedTools.find(t => t.id === tool.id)) {
+							const found = orderedTools.find(t => t.id === tool.id)
+							if (found == null) {
 								orderedTools.push(tool)
 							}
 						}
@@ -85,7 +86,16 @@
 					// 如果读取失败，使用默认顺序
 					this.tools = defaultTools
 				}
-				this.originalOrder = JSON.parse(JSON.stringify(this.tools))
+				// 深拷贝工具列表
+				const toolsCopy: ToolItem[] = []
+				for (const tool of this.tools) {
+					toolsCopy.push({
+						id: tool.id,
+						name: tool.name,
+						icon: tool.icon
+					})
+				}
+				this.originalOrder = toolsCopy
 			},
 			saveToolsOrder() {
 				// 保存工具顺序到本地存储
@@ -101,13 +111,29 @@
 					return
 				}
 				
-				const touch = e.touches[0]
+				// 使用Map方式访问事件对象属性
+				const eventObj = e as Map<string, any>
+				if (eventObj == null) {
+					return
+				}
+				
+				const touches = eventObj.get("touches") as any[] | null
+				if (touches == null || touches.length === 0) {
+					return
+				}
+				
+				const touch = touches[0] as Map<string, any> | null
 				if (touch == null) {
 					return
 				}
 				
-				this.dragStartY = touch.clientY
-				this.dragCurrentY = touch.clientY
+				const clientY = touch.get("clientY") as number | null
+				if (clientY == null) {
+					return
+				}
+				
+				this.dragStartY = clientY
+				this.dragCurrentY = clientY
 				
 				// 启动长按计时器（500ms长按触发拖动）
 				this.longPressTimer = setTimeout(() => {
@@ -115,30 +141,43 @@
 				}, 500) as number
 			},
 			onTouchMove(e: any, index: number) {
-				if (!this.isDragging) {
-					// 如果移动距离较大，取消长按计时器
-					const touch = e.touches[0]
-					if (touch != null) {
-						const moveDistance = Math.abs(touch.clientY - this.dragStartY)
-						if (moveDistance > 10) {
-							clearTimeout(this.longPressTimer)
-							this.longPressTimer = 0
-						}
-					}
+				// 使用Map方式访问事件对象属性
+				const eventObj = e as Map<string, any>
+				if (eventObj == null) {
 					return
 				}
 				
-				const touch = e.touches[0]
+				const touches = eventObj.get("touches") as any[] | null
+				if (touches == null || touches.length === 0) {
+					return
+				}
+				
+				const touch = touches[0] as Map<string, any> | null
 				if (touch == null) {
 					return
 				}
 				
-				this.dragCurrentY = touch.clientY
+				const clientY = touch.get("clientY") as number | null
+				if (clientY == null) {
+					return
+				}
+				
+				if (this.isDragging == false) {
+					// 如果移动距离较大，取消长按计时器
+					const moveDistance = Math.abs(clientY - this.dragStartY)
+					if (moveDistance > 10) {
+						clearTimeout(this.longPressTimer)
+						this.longPressTimer = 0
+					}
+					return
+				}
+				
+				this.dragCurrentY = clientY
 				
 				// 计算应该插入的位置
 				// 卡片高度150px + 底部间距20px = 170px
 				const cardHeight = 170
-				const relativeY = touch.clientY - this.dragStartY
+				const relativeY = clientY - this.dragStartY
 				const rowOffset = Math.round(relativeY / cardHeight)
 				const targetIndex = index + rowOffset
 				
@@ -163,7 +202,8 @@
 			startDragging(index: number) {
 				this.isDragging = true
 				this.draggingIndex = index
-				// 振动反馈（某些平台可能不支持，使用try-catch）
+				// 振动反馈（某些平台可能不支持）
+				// #ifdef APP-PLUS
 				try {
 					uni.vibrateShort({
 						type: 'medium'
@@ -171,6 +211,7 @@
 				} catch (e) {
 					// 忽略振动失败
 				}
+				// #endif
 			},
 			stopDragging() {
 				this.isDragging = false

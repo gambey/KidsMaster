@@ -181,7 +181,8 @@
 				this.stopTimer()
 				this.isRunning = false
 				
-				// 振动和提示
+				// 振动和提示（某些平台可能不支持）
+				// #ifdef APP-PLUS
 				try {
 					uni.vibrateShort({
 						type: 'heavy'
@@ -189,6 +190,7 @@
 				} catch (e) {
 					// 忽略振动失败
 				}
+				// #endif
 				
 				uni.showToast({
 					title: `${this.currentMode}时间到！`,

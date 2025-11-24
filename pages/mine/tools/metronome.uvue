@@ -19,12 +19,7 @@
 						<text class="bpm-button-text">−</text>
 					</view>
 					<view class="bpm-input-wrapper">
-						<input 
-							class="bpm-input" 
-							type="number" 
-							v-model="bpm" 
-							@input="onBpmInput"
-						/>
+						<text class="bpm-display-text">{{ bpm }}</text>
 					</view>
 					<view class="bpm-button" @click="increaseBpm">
 						<text class="bpm-button-text">+</text>
@@ -89,16 +84,6 @@
 			this.stopMetronome()
 		},
 		methods: {
-			onBpmInput(e: any) {
-				const value = parseInt(e.detail.value)
-				if (!isNaN(value) && value >= 40 && value <= 200) {
-					this.bpm = value
-					this.saveBpm()
-					if (this.isPlaying) {
-						this.restartMetronome()
-					}
-				}
-			},
 			increaseBpm() {
 				if (this.bpm < 200) {
 					this.bpm++
@@ -173,7 +158,8 @@
 					this.isBeat = false
 				}, 100) as number
 				
-				// 振动反馈
+				// 振动反馈（某些平台可能不支持）
+				// #ifdef APP-PLUS
 				try {
 					uni.vibrateShort({
 						type: 'light'
@@ -181,6 +167,7 @@
 				} catch (e) {
 					// 忽略振动失败
 				}
+				// #endif
 			},
 			goBack() {
 				this.stopMetronome()
@@ -313,9 +300,7 @@
 		box-shadow: 0px 6px 0px rgba(0,0,0,0.15), 0px 3px 0px rgba(0,0,0,0.1);
 	}
 	
-	.bpm-input {
-		width: 100%;
-		height: 100%;
+	.bpm-display-text {
 		font-size: 32px;
 		color: #FF9800;
 		font-weight: bold;
