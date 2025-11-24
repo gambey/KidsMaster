@@ -13,11 +13,11 @@
 		</view>
 		
 		<view class="grid-container" v-if="gameStarted || gameFinished">
-			<view class="grid-row" v-for="(row, rowIndex) in grid" :key="rowIndex">
+			<view class="grid-row" v-for="(row, rowIndex) in grid" :key="`row-${rowIndex}`">
 				<view 
 					class="grid-cell" 
 					v-for="(cell, cellIndex) in row" 
-					:key="cellIndex"
+					:key="`cell-${rowIndex}-${cellIndex}`"
 					:class="{ 'cell-clicked': cell.clicked }"
 					:style="{ width: cellSize + 'px', height: cellSize + 'px' }"
 					@click="handleCellClick(cell)"
@@ -26,7 +26,7 @@
 				</view>
 			</view>
 		</view>
-
+		
 		<view class="button-container" v-if="gameFinished">
 			<view class="restart-button" @click="restartGame">
 				<text class="button-text">🔄 再来一次</text>
@@ -57,7 +57,8 @@
 			gridSize: 3,
 			totalNumbers: 9,
 			cellSize: 60,
-			fontSize: 24
+			fontSize: 24,
+			shouldAutoStart: true
 			}
 		},
 		onLoad(options: OnLoadOptions) {
@@ -88,13 +89,30 @@
 			// 检查是否需要自动开始游戏
 			const autoStart = options["autoStart"]
 			if (autoStart != null) {
-				const autoStartStr = autoStart.toString()
-				if (autoStartStr === "true" || autoStartStr === "1") {
-					// 延迟一小段时间确保页面渲染完成
+				const autoStartStr = autoStart.toString().toLowerCase().trim()
+				if (autoStartStr === "true" || autoStartStr === "1" || autoStartStr === "yes") {
+					// 设置自动开始标志
+					this.shouldAutoStart = true
+					// 备用方案：如果onReady没有触发，使用延迟启动
 					setTimeout(() => {
-						this.startGame()
-					}, 100)
+						if (this.shouldAutoStart && !this.gameStarted) {
+							this.startGame()
+							this.shouldAutoStart = false
+						}
+					}, 500)
 				}
+			}
+		},
+		onReady() {
+			// 页面渲染完成后，如果设置了自动开始，则开始游戏
+			if (this.shouldAutoStart && !this.gameStarted) {
+				// Android平台需要延迟确保所有元素都已渲染
+				setTimeout(() => {
+					if (this.shouldAutoStart && !this.gameStarted) {
+						this.startGame()
+						this.shouldAutoStart = false
+					}
+				}, 300)
 			}
 		},
 		onHide() {
@@ -159,13 +177,23 @@
 				this.grid = newGrid
 			},
 			startGame() {
-				this.generateGrid()
-				this.gameStarted = true
+				// 先重置所有状态
 				this.gameFinished = false
 				this.currentNumber = 1
-				this.startTime = Date.now()
 				this.elapsedTime = 0
-				this.startTimer()
+				
+				// 先清空网格，确保视图更新
+				this.grid = []
+				
+				// 生成新网格
+				this.generateGrid()
+				
+				// Android平台需要延迟设置gameStarted，确保grid已更新
+				setTimeout(() => {
+					this.gameStarted = true
+					this.startTime = Date.now()
+					this.startTimer()
+				}, 100)
 			},
 			restartGame() {
 				this.startGame()
@@ -243,33 +271,39 @@
 <style>
 	.container {
 		flex: 1;
-		background: linear-gradient(135deg, #A8E6CF 0%, #D4F1F4 100%);
-		padding: 20px;
+		background-color: #B8E6D4;
+		padding: 10px;
+		width: 100%;
 	}
 	
 	.header {
-		margin-top: 20px;
-		margin-bottom: 20px;
+		margin-top: 10px;
+		margin-bottom: 10px;
 	}
 	
 	.title {
-		font-size: 32px;
+		font-size: 28px;
 		font-weight: bold;
-		color: #4ECDC4;
+		color: #FFFFFF;
 		text-align: center;
-		text-shadow: 2px 2px 0px #FFFFFF, 4px 4px 0px rgba(0,0,0,0.1);
+		background-color: #4ECDC4;
+		padding: 6px 12px;
+		border-radius: 8px;
+		border: 2px solid #FFFFFF;
 	}
 	
 	.game-info-bar {
 		flex-direction: row;
 		justify-content: space-between;
 		align-items: center;
-		background: rgba(255, 255, 255, 0.8);
-		border-radius: 15px;
+		background-color: #FFFFFF;
+		border-radius: 12px;
 		border: 3px solid #FFFFFF;
-		padding: 15px 20px;
-		margin-bottom: 20px;
-		box-shadow: 0px 4px 0px rgba(0,0,0,0.1);
+		border-bottom-width: 6px;
+		border-bottom-color: #E0E0E0;
+		padding: 10px 15px;
+		margin-bottom: 10px;
+		width: 100%;
 	}
 	
 	.info-text {
@@ -281,19 +315,19 @@
 	}
 	
 	.timer-text {
-		font-size: 18px;
+		font-size: 16px;
 		color: #FF6B6B;
 		font-weight: bold;
 	}
 	
 	.current-text {
-		font-size: 18px;
+		font-size: 16px;
 		color: #4ECDC4;
 		font-weight: bold;
 	}
 	
 	.result-text {
-		font-size: 20px;
+		font-size: 18px;
 		color: #FF6B6B;
 		font-weight: bold;
 		text-align: center;
@@ -304,52 +338,57 @@
 		width: 100%;
 		align-items: center;
 		justify-content: center;
-		margin: 20px 0;
+		margin: 10px 0;
+		padding: 5px;
 	}
 	
 	.grid-row {
 		flex-direction: row;
 		justify-content: center;
+		align-items: center;
 		margin-bottom: 4px;
+		width: 100%;
 	}
 	
 	.grid-cell {
-		background: linear-gradient(135deg, #FFE5B4 0%, #FFCCCB 100%);
+		background-color: #FFD4B8;
 		border-radius: 12px;
 		border: 3px solid #FF6B6B;
+		border-bottom-width: 6px;
+		border-bottom-color: #E63946;
 		margin: 2px;
 		align-items: center;
 		justify-content: center;
-		box-shadow: 0px 4px 0px rgba(255, 107, 107, 0.3), 0px 2px 0px rgba(255, 107, 107, 0.2);
+		position: relative;
 	}
 	
 	.grid-cell:active {
-		transform: translateY(2px);
-		box-shadow: 0px 2px 0px rgba(255, 107, 107, 0.2), 0px 1px 0px rgba(255, 107, 107, 0.1);
+		background-color: #FFC8A2;
+		border-bottom-width: 3px;
 	}
 	
 	.cell-number {
 		font-weight: bold;
 		color: #FF6B6B;
-		text-shadow: 2px 2px 0px #FFFFFF, 1px 1px 0px rgba(0,0,0,0.1);
+		text-align: center;
+		line-height: 1;
 	}
 	
 	.cell-clicked {
-		background: linear-gradient(135deg, #7A7E83 0%, #5A5A5A 100%);
+		background-color: #6A6A6A;
 		border-color: #4A4A4A;
 		opacity: 0.8;
 	}
 	
 	.cell-clicked .cell-number {
 		color: #CCCCCC;
-		text-shadow: 2px 2px 0px rgba(0,0,0,0.5), 1px 1px 0px rgba(0,0,0,0.3);
 		text-decoration: line-through;
 	}
 	
 	.cell-current {
-		background: linear-gradient(135deg, #FFE5B4 0%, #FFCCCB 100%);
+		background-color: #FFD4B8;
 		border-color: #FF6B6B;
-		box-shadow: 0px 4px 0px rgba(255, 107, 107, 0.3), 0px 2px 0px rgba(255, 107, 107, 0.2);
+		border-width: 4px;
 	}
 	
 	.cell-current .cell-number {
@@ -358,68 +397,75 @@
 	}
 	
 	.button-container {
-		margin-top: 30px;
+		margin-top: 15px;
+		margin-bottom: 10px;
+		width: 100%;
 		align-items: center;
 		justify-content: center;
 		flex-direction: row;
 		flex-wrap: wrap;
+		padding: 5px;
 	}
 	
 	.start-button {
-		width: 200px;
-		height: 60px;
-		background: linear-gradient(135deg, #FF6B6B 0%, #FF8E8E 100%);
-		border-radius: 20px;
-		border: 4px solid #FFFFFF;
-		box-shadow: 0px 8px 0px rgba(0,0,0,0.2), 0px 4px 0px rgba(0,0,0,0.15);
+		width: 180px;
+		min-width: 160px;
+		height: 50px;
+		min-height: 45px;
+		background-color: #FF6B6B;
+		border-radius: 15px;
+		border: 3px solid #FFFFFF;
+		border-bottom-width: 6px;
+		border-bottom-color: #E63946;
 		align-items: center;
 		justify-content: center;
-		margin: 10px;
+		margin: 5px;
 	}
 	
 	.start-button:active {
-		transform: translateY(2px);
-		box-shadow: 0px 4px 0px rgba(0,0,0,0.15), 0px 2px 0px rgba(0,0,0,0.1);
+		background-color: #FF5252;
+		border-bottom-width: 3px;
 	}
 	
 	.restart-button {
-		width: 160px;
-		height: 60px;
-		background: linear-gradient(135deg, #4ECDC4 0%, #95E1D3 100%);
-		border-radius: 20px;
-		border: 4px solid #FFFFFF;
-		box-shadow: 0px 8px 0px rgba(0,0,0,0.2), 0px 4px 0px rgba(0,0,0,0.15);
+		width: 140px;
+		height: 50px;
+		background-color: #4ECDC4;
+		border-radius: 15px;
+		border: 3px solid #FFFFFF;
+		border-bottom-width: 6px;
+		border-bottom-color: #3AB5AD;
 		align-items: center;
 		justify-content: center;
-		margin: 10px;
+		margin: 5px;
 	}
 	
 	.restart-button:active {
-		transform: translateY(2px);
-		box-shadow: 0px 4px 0px rgba(0,0,0,0.15), 0px 2px 0px rgba(0,0,0,0.1);
+		background-color: #3AB5AD;
+		border-bottom-width: 3px;
 	}
 	
 	.back-button {
-		width: 160px;
-		height: 60px;
-		background: linear-gradient(135deg, #FFE5B4 0%, #FFCCCB 100%);
-		border-radius: 20px;
-		border: 4px solid #FFFFFF;
-		box-shadow: 0px 8px 0px rgba(0,0,0,0.2), 0px 4px 0px rgba(0,0,0,0.15);
+		width: 140px;
+		height: 50px;
+		background-color: #FFD4B8;
+		border-radius: 15px;
+		border: 3px solid #FFFFFF;
+		border-bottom-width: 6px;
+		border-bottom-color: #FFB88C;
 		align-items: center;
 		justify-content: center;
-		margin: 10px;
+		margin: 5px;
 	}
 	
 	.back-button:active {
-		transform: translateY(2px);
-		box-shadow: 0px 4px 0px rgba(0,0,0,0.15), 0px 2px 0px rgba(0,0,0,0.1);
+		background-color: #FFB88C;
+		border-bottom-width: 3px;
 	}
 	
 	.button-text {
-		font-size: 20px;
+		font-size: 18px;
 		font-weight: bold;
 		color: #FFFFFF;
-		text-shadow: 2px 2px 0px rgba(0,0,0,0.2);
 	}
 </style>

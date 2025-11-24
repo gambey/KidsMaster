@@ -275,7 +275,7 @@
 <style>
 	.container {
 		flex: 1;
-		background: linear-gradient(135deg, #FFB74D 0%, #FFA726 100%);
+		background-color: #FFB74D;
 		padding: 20px;
 	}
 	
@@ -318,7 +318,10 @@
 		font-weight: bold;
 		color: #FFFFFF;
 		text-align: center;
-		text-shadow: 2px 2px 0px #FF6B6B, 4px 4px 0px rgba(0,0,0,0.1);
+		background-color: #FF9800;
+		padding: 8px 16px;
+		border-radius: 8px;
+		border: 2px solid #FFFFFF;
 	}
 	
 	.content {
@@ -333,36 +336,39 @@
 	.tool-card {
 		width: 45%;
 		height: 180px;
-		background: rgba(255, 255, 255, 0.9);
+		background-color: #FFFFFF;
 		border-radius: 20px;
 		border: 4px solid #FFFFFF;
+		border-bottom-width: 8px;
+		border-bottom-color: #E0E0E0;
 		margin-bottom: 20px;
 		align-items: center;
 		justify-content: center;
 		position: relative;
-		box-shadow: 0px 6px 0px rgba(0,0,0,0.15), 0px 3px 0px rgba(0,0,0,0.1);
 	}
 	
 	.tool-card:active {
-		transform: translateY(2px);
-		box-shadow: 0px 3px 0px rgba(0,0,0,0.1), 0px 1px 0px rgba(0,0,0,0.05);
+		background-color: #F5F5F5;
+		border-bottom-width: 4px;
 	}
 	
 	.card-dragging {
-		box-shadow: 0px 8px 16px rgba(0,0,0,0.3), 0px 4px 8px rgba(0,0,0,0.2);
-		transform: scale(1.05);
+		background-color: #FFF9C4;
+		border-width: 5px;
+		border-color: #FF9800;
 	}
 	
 	.card-icon {
 		width: 90px;
 		height: 90px;
 		border-radius: 45px;
-		background: linear-gradient(135deg, #FFE5B4 0%, #FFCCCB 100%);
+		background-color: #FFD4B8;
 		border: 3px solid #FFFFFF;
+		border-bottom-width: 6px;
+		border-bottom-color: #FFB88C;
 		align-items: center;
 		justify-content: center;
 		margin-bottom: 12px;
-		box-shadow: 0px 4px 0px rgba(0,0,0,0.1), 0px 2px 0px rgba(0,0,0,0.05);
 	}
 	
 	.icon-text {

@@ -26,7 +26,7 @@
 <style>
 	.container {
 		flex: 1;
-		background: linear-gradient(135deg, #FFE5B4 0%, #FFCCCB 100%);
+		background-color: #FFD4B8;
 		padding: 20px;
 	}
 	
@@ -38,9 +38,12 @@
 	.title {
 		font-size: 32px;
 		font-weight: bold;
-		color: #FF6B6B;
+		color: #FFFFFF;
 		text-align: center;
-		text-shadow: 2px 2px 0px #FFFFFF, 4px 4px 0px rgba(0,0,0,0.1);
+		background-color: #FF6B6B;
+		padding: 8px 16px;
+		border-radius: 8px;
+		border: 2px solid #FFFFFF;
 	}
 	
 	.content {
