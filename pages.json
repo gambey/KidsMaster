@@ -65,6 +65,13 @@
 			}
 		},
 		{
+			"path": "pages/game/schulte/schulte-2players",
+			"style": {
+				"navigationBarTitleText": "舒尔特方格-双人",
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/game/numhearing/numhearing",
 			"style": {
 				"navigationBarTitleText": "听数挑战",

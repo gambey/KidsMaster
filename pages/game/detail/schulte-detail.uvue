@@ -15,9 +15,29 @@
 		<view class="settings-container">
 			<text class="settings-title">选择难度：</text>
 			<view class="size-buttons">
-				<view class="size-button" v-for="size in [3, 4, 5, 6, 7, 8, 9]" :key="size"
+				<view class="size-button" v-for="size in getAvailableSizes()" :key="size"
 					:class="{ 'size-button-active': gridSize === size }" @click="setGridSize(size)">
-					<text class="size-button-text">{{ size }}×{{ size }}</text>
+					<text class="size-button-text">{{ size }}x{{size}}</text>
+				</view>
+			</view>
+		</view>
+
+		<view class="mode-container">
+			<text class="mode-title">游戏模式：</text>
+			<view class="mode-buttons">
+				<view 
+					class="mode-button" 
+					:class="{ 'mode-button-active': gameMode === 'single' }"
+					@click="setGameMode('single')"
+				>
+					<text class="mode-button-text">👤 单人游戏</text>
+				</view>
+				<view 
+					class="mode-button" 
+					:class="{ 'mode-button-active': gameMode === 'multi' }"
+					@click="setGameMode('multi')"
+				>
+					<text class="mode-button-text">👥 双人游戏</text>
 				</view>
 			</view>
 		</view>
@@ -34,24 +54,62 @@
 	export default {
 		data() {
 			return {
-				gridSize: 3
+				gridSize: 3,
+				maxNumber: 10,
+				gameMode: 'single' // 'single' 单人游戏, 'multi' 双人游戏
 			}
 		},
 		onLoad(options : OnLoadOptions) {
-			// 从本地存储读取用户设置的阶数
+			// 先从本地存储读取游戏模式
 			try {
-				const savedSize = uni.getStorageSync('schulteGridSize')
-				if (savedSize != null && savedSize != "") {
-					const size = parseInt(savedSize.toString())
-					if (!isNaN(size) && size >= 3 && size <= 9) {
-						this.gridSize = size
+				const savedMode = uni.getStorageSync('schulteGameMode')
+				if (savedMode != null && savedMode != "") {
+					const mode = savedMode.toString()
+					if (mode === 'single' || mode === 'multi') {
+						this.gameMode = mode
 					}
 				}
 			} catch (e) {
 				// 忽略错误，使用默认值
 			}
+			
+			// 从本地存储读取用户设置的阶数
+			try {
+				const savedSize = uni.getStorageSync('schulteGridSize')
+				if (savedSize != null && savedSize != "") {
+					const size = parseInt(savedSize.toString())
+					if (!isNaN(size) && size >= 3 && size <= this.maxNumber) {
+						// 根据游戏模式验证尺寸
+						if (this.gameMode === 'multi' && size < 5) {
+							// 双人游戏最小为5x5
+							this.gridSize = 5
+						} else {
+							this.gridSize = size
+						}
+					}
+				} else {
+					// 如果没有保存的尺寸，根据游戏模式设置默认值
+					if (this.gameMode === 'multi') {
+						this.gridSize = 5
+					}
+				}
+			} catch (e) {
+				// 忽略错误，使用默认值
+				if (this.gameMode === 'multi') {
+					this.gridSize = 5
+				}
+			}
 		},
 		methods: {
+			getAvailableSizes(): number[] {
+				// 单人游戏：3x3 到 10x10
+				// 双人游戏：5x5 到 10x10
+				if (this.gameMode === 'multi') {
+					return [5, 6, 7, 8, 9, 10]
+				} else {
+					return [3, 4, 5, 6, 7, 8, 9, 10]
+				}
+			},
 			setGridSize(size : number) {
 				this.gridSize = size
 				// 保存到本地存储
@@ -61,10 +119,37 @@
 					// 忽略错误
 				}
 			},
+			setGameMode(mode: string) {
+				this.gameMode = mode
+				// 保存到本地存储
+				try {
+					uni.setStorageSync('schulteGameMode', mode)
+				} catch (e) {
+					// 忽略错误
+				}
+				
+				// 如果切换到双人游戏，且当前gridSize小于5，自动调整为5
+				if (mode === 'multi' && this.gridSize < 5) {
+					this.setGridSize(5)
+				}
+				// 如果切换到单人游戏，且当前gridSize小于3，自动调整为3
+				else if (mode === 'single' && this.gridSize < 3) {
+					this.setGridSize(3)
+				}
+			},
 			startGame() {
-				uni.navigateTo({
-					url: `/pages/game/schulte/schulte?autoStart=true&gridSize=${this.gridSize}`
-				})
+				// 根据游戏模式跳转到不同的页面
+				if (this.gameMode === 'multi') {
+					// 双人游戏跳转到 schulte-2players 页面
+					uni.navigateTo({
+						url: `/pages/game/schulte/schulte-2players?autoStart=true&gridSize=${this.gridSize}&gameMode=${this.gameMode}`
+					})
+				} else {
+					// 单人游戏跳转到 schulte 页面
+					uni.navigateTo({
+						url: `/pages/game/schulte/schulte?autoStart=true&gridSize=${this.gridSize}&gameMode=${this.gameMode}`
+					})
+				}
 			}
 		}
 	}
@@ -219,6 +304,65 @@
 	}
 
 	.size-button-active .size-button-text {
+		color: #FFFFFF;
+	}
+	
+	.mode-container {
+		background-color: #FFFFFF;
+		border-radius: 12px;
+		border: 3px solid #FFFFFF;
+		border-bottom-width: 6px;
+		border-bottom-color: #E0E0E0;
+		padding: 12px;
+		margin: 10px;
+		margin-bottom: 15px;
+	}
+	
+	.mode-title {
+		font-size: 16px;
+		color: #4ECDC4;
+		font-weight: bold;
+		margin-bottom: 10px;
+		text-align: center;
+	}
+	
+	.mode-buttons {
+		flex-direction: row;
+		justify-content: center;
+		align-items: center;
+	}
+	
+	.mode-button {
+		flex: 1;
+		height: 50px;
+		background-color: #FFFFFF;
+		border-radius: 12px;
+		border: 3px solid #FFFFFF;
+		border-bottom-width: 6px;
+		border-bottom-color: #E0E0E0;
+		align-items: center;
+		justify-content: center;
+		margin: 0 5px;
+	}
+	
+	.mode-button:active {
+		background-color: #F5F5F5;
+		border-bottom-width: 3px;
+	}
+	
+	.mode-button-active {
+		background-color: #4ECDC4;
+		border-color: #4ECDC4;
+		border-width: 4px;
+	}
+	
+	.mode-button-text {
+		font-size: 16px;
+		font-weight: bold;
+		color: #4ECDC4;
+	}
+	
+	.mode-button-active .mode-button-text {
 		color: #FFFFFF;
 	}
 </style>

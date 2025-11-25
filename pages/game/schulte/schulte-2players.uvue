@@ -8,8 +8,30 @@
 			<text class="current-text">当前: {{ currentNumber }}/{{ totalNumbers }}</text>
 		</view>
 		
+		<view class="score-bar" v-if="gameStarted && !gameFinished">
+			<view class="player-score">
+				<text class="player-label">玩家1</text>
+				<text class="score-value">{{ player1Score }}</text>
+			</view>
+			<view class="player-score">
+				<text class="player-label">玩家2</text>
+				<text class="score-value">{{ player2Score }}</text>
+			</view>
+		</view>
+		
 		<view class="game-info-bar" v-if="gameFinished">
 			<text class="result-text">🎉 完成！用时: {{ formatTime(elapsedTime) }}</text>
+		</view>
+		
+		<view class="final-score-bar" v-if="gameFinished">
+			<view class="final-score-item">
+				<text class="final-score-label">玩家1</text>
+				<text class="final-score-value">{{ player1Score }}分</text>
+			</view>
+			<view class="final-score-item">
+				<text class="final-score-label">玩家2</text>
+				<text class="final-score-value">{{ player2Score }}分</text>
+			</view>
 		</view>
 		
 		<view class="grid-container" v-if="gameStarted || gameFinished">
@@ -18,11 +40,39 @@
 					class="grid-cell" 
 					v-for="(cell, cellIndex) in row" 
 					:key="`cell-${rowIndex}-${cellIndex}`"
-					:class="{ 'cell-clicked': cell.clicked }"
+					:class="{ 'cell-clicked': cell.clicked, 'cell-dragging': draggingCell === cell }"
 					:style="{ width: cellSize + 'px', height: cellSize + 'px' }"
-					@click="handleCellClick(cell)"
+					@click="onCellClick(cell)"
+					@touchstart="onCellTouchStart($event, cell)"
+					@touchmove="onCellTouchMove($event, cell)"
+					@touchend="onCellTouchEnd($event, cell)"
 				>
 					<text class="cell-number" :style="{ fontSize: fontSize + 'px' }">{{ cell.number }}</text>
+				</view>
+			</view>
+		</view>
+		
+		<view class="drop-zones-container" v-if="gameStarted && !gameFinished">
+			<view 
+				class="drop-zone" 
+				:class="{ 'drop-zone-active': draggingCell != null, 'drop-zone-correct': dropZone1Correct, 'drop-zone-wrong': dropZone1Wrong }"
+				@click="onDropZoneClick(1)"
+			>
+				<text class="drop-zone-label">玩家1</text>
+				<view class="drop-zone-content">
+					<text class="drop-zone-number" v-if="dropZone1Number > 0">{{ dropZone1Number }}</text>
+					<text class="drop-zone-placeholder" v-else>点击数字后<br/>点击这里</text>
+				</view>
+			</view>
+			<view 
+				class="drop-zone" 
+				:class="{ 'drop-zone-active': draggingCell != null, 'drop-zone-correct': dropZone2Correct, 'drop-zone-wrong': dropZone2Wrong }"
+				@click="onDropZoneClick(2)"
+			>
+				<text class="drop-zone-label">玩家2</text>
+				<view class="drop-zone-content">
+					<text class="drop-zone-number" v-if="dropZone2Number > 0">{{ dropZone2Number }}</text>
+					<text class="drop-zone-placeholder" v-else>点击数字后<br/>点击这里</text>
 				</view>
 			</view>
 		</view>
@@ -58,7 +108,18 @@
 			totalNumbers: 14,
 			cellSize: 60,
 			fontSize: 24,
-			shouldAutoStart: true
+			shouldAutoStart: true,
+			player1Score: 0,
+			player2Score: 0,
+			draggingCell: null as GridCell | null,
+			dragStartX: 0,
+			dragStartY: 0,
+			dropZone1Number: 0,
+			dropZone2Number: 0,
+			dropZone1Correct: false,
+			dropZone1Wrong: false,
+			dropZone2Correct: false,
+			dropZone2Wrong: false
 			}
 		},
 		onLoad(options: OnLoadOptions) {
@@ -181,6 +242,15 @@
 				this.gameFinished = false
 				this.currentNumber = 1
 				this.elapsedTime = 0
+				this.player1Score = 0
+				this.player2Score = 0
+				this.dropZone1Number = 0
+				this.dropZone2Number = 0
+				this.dropZone1Correct = false
+				this.dropZone1Wrong = false
+				this.dropZone2Correct = false
+				this.dropZone2Wrong = false
+				this.draggingCell = null
 				
 				// 先清空网格，确保视图更新
 				this.grid = []
@@ -198,35 +268,165 @@
 			restartGame() {
 				this.startGame()
 			},
-			handleCellClick(cell: GridCell) {
+			onCellClick(cell: GridCell) {
 				if (this.gameFinished || cell.clicked) {
 					return
 				}
 				
-				if (cell.number === this.currentNumber) {
-					cell.clicked = true
-					this.currentNumber++
-					
-					// 检查是否完成
-					if (this.currentNumber > this.totalNumbers) {
-						this.finishGame()
-					}
+				// 选中单元格用于拖拽
+				if (this.draggingCell === cell) {
+					// 如果已经选中，则取消选中
+					this.draggingCell = null
 				} else {
-					// 点击错误，提示
+					this.draggingCell = cell
+				}
+			},
+			onCellTouchStart(e: any, cell: GridCell) {
+				if (this.gameFinished || cell.clicked) {
+					return
+				}
+				
+				// 选中单元格用于拖拽
+				if (this.draggingCell === cell) {
+					// 如果已经选中，则取消选中
+					this.draggingCell = null
+				} else {
+					this.draggingCell = cell
+				}
+			},
+			onCellTouchMove(e: any, cell: GridCell) {
+				// 移动时保持选中状态
+			},
+			onCellTouchEnd(e: any, cell: GridCell) {
+				// 触摸结束，保持选中状态直到放入拖放区域
+			},
+			onDropZoneClick(playerIndex: number) {
+				if (this.draggingCell == null || this.gameFinished) {
+					if (this.draggingCell == null) {
+						uni.showToast({
+							title: '请先点击一个数字',
+							icon: 'none',
+							duration: 1000
+						})
+					}
+					return
+				}
+				
+				const cell = this.draggingCell
+				if (cell.clicked) {
+					this.draggingCell = null
 					uni.showToast({
-						title: '顺序不对哦，继续加油！',
+						title: '这个数字已经被使用',
 						icon: 'none',
 						duration: 1000
 					})
+					return
 				}
+				
+				// 检查数字是否正确
+				const isCorrect = cell.number === this.currentNumber
+				
+				if (playerIndex === 1) {
+					this.dropZone1Number = cell.number
+					if (isCorrect) {
+						this.player1Score++
+						this.dropZone1Correct = true
+						this.dropZone1Wrong = false
+						cell.clicked = true
+						this.currentNumber++
+						
+						uni.showToast({
+							title: '玩家1得分！',
+							icon: 'success',
+							duration: 1000
+						})
+						
+						// 检查是否完成
+						if (this.currentNumber > this.totalNumbers) {
+							this.finishGame()
+						} else {
+							// 延迟清除正确状态
+							setTimeout(() => {
+								this.dropZone1Number = 0
+								this.dropZone1Correct = false
+							}, 1500)
+						}
+					} else {
+						this.dropZone1Wrong = true
+						this.dropZone1Correct = false
+						uni.showToast({
+							title: '数字错误',
+							icon: 'none',
+							duration: 1000
+						})
+						// 延迟清除错误状态
+						setTimeout(() => {
+							this.dropZone1Number = 0
+							this.dropZone1Wrong = false
+						}, 1500)
+					}
+				} else if (playerIndex === 2) {
+					this.dropZone2Number = cell.number
+					if (isCorrect) {
+						this.player2Score++
+						this.dropZone2Correct = true
+						this.dropZone2Wrong = false
+						cell.clicked = true
+						this.currentNumber++
+						
+						uni.showToast({
+							title: '玩家2得分！',
+							icon: 'success',
+							duration: 1000
+						})
+						
+						// 检查是否完成
+						if (this.currentNumber > this.totalNumbers) {
+							this.finishGame()
+						} else {
+							// 延迟清除正确状态
+							setTimeout(() => {
+								this.dropZone2Number = 0
+								this.dropZone2Correct = false
+							}, 1500)
+						}
+					} else {
+						this.dropZone2Wrong = true
+						this.dropZone2Correct = false
+						uni.showToast({
+							title: '数字错误',
+							icon: 'none',
+							duration: 1000
+						})
+						// 延迟清除错误状态
+						setTimeout(() => {
+							this.dropZone2Number = 0
+							this.dropZone2Wrong = false
+						}, 1500)
+					}
+				}
+				
+				this.draggingCell = null
 			},
 			finishGame() {
 				this.gameFinished = true
 				this.stopTimer()
+				this.draggingCell = null
+				
+				// 判断获胜者
+				let winnerText = ''
+				if (this.player1Score > this.player2Score) {
+					winnerText = '玩家1获胜！'
+				} else if (this.player2Score > this.player1Score) {
+					winnerText = '玩家2获胜！'
+				} else {
+					winnerText = '平局！'
+				}
+				
 				uni.showToast({
-					title: '太棒了！完成游戏！',
+					title: `太棒了！完成游戏！${winnerText}`,
 					icon: 'success',
-					duration: 2000
+					duration: 3000
 				})
 			},
 			startTimer() {
@@ -467,5 +667,144 @@
 		font-size: 18px;
 		font-weight: bold;
 		color: #FFFFFF;
+	}
+	
+	.score-bar {
+		flex-direction: row;
+		justify-content: space-around;
+		align-items: center;
+		background-color: #FFFFFF;
+		border-radius: 12px;
+		border: 3px solid #FFFFFF;
+		border-bottom-width: 6px;
+		border-bottom-color: #E0E0E0;
+		padding: 10px 15px;
+		margin-bottom: 10px;
+		width: 100%;
+	}
+	
+	.player-score {
+		align-items: center;
+		justify-content: center;
+		flex: 1;
+	}
+	
+	.player-label {
+		font-size: 14px;
+		color: #4ECDC4;
+		font-weight: bold;
+		margin-bottom: 5px;
+	}
+	
+	.score-value {
+		font-size: 24px;
+		color: #FF6B6B;
+		font-weight: bold;
+	}
+	
+	.drop-zones-container {
+		width: 100%;
+		flex-direction: row;
+		justify-content: space-around;
+		align-items: center;
+		margin-top: 15px;
+		margin-bottom: 10px;
+		padding: 0 10px;
+	}
+	
+	.drop-zone {
+		flex: 1;
+		height: 100px;
+		background-color: #FFFFFF;
+		border-radius: 15px;
+		border: 3px solid #E0E0E0;
+		border-bottom-width: 6px;
+		border-bottom-color: #D0D0D0;
+		margin: 0 5px;
+		align-items: center;
+		justify-content: center;
+		padding: 10px;
+	}
+	
+	.drop-zone-active {
+		border-color: #4ECDC4;
+		border-width: 4px;
+		background-color: #E8F5E9;
+	}
+	
+	.drop-zone-correct {
+		background-color: #C8E6C9;
+		border-color: #4CAF50;
+	}
+	
+	.drop-zone-wrong {
+		background-color: #FFCDD2;
+		border-color: #F44336;
+	}
+	
+	.drop-zone-label {
+		font-size: 14px;
+		color: #4ECDC4;
+		font-weight: bold;
+		margin-bottom: 5px;
+	}
+	
+	.drop-zone-content {
+		align-items: center;
+		justify-content: center;
+		flex: 1;
+	}
+	
+	.drop-zone-number {
+		font-size: 32px;
+		font-weight: bold;
+		color: #FF6B6B;
+	}
+	
+	.drop-zone-placeholder {
+		font-size: 12px;
+		color: #999999;
+		text-align: center;
+		line-height: 16px;
+	}
+	
+	.cell-dragging {
+		background-color: #FFF9C4;
+		border-color: #FFD54F;
+		border-width: 4px;
+	}
+	
+	.final-score-bar {
+		flex-direction: row;
+		justify-content: space-around;
+		align-items: center;
+		background-color: #FFFFFF;
+		border-radius: 12px;
+		border: 3px solid #FFFFFF;
+		border-bottom-width: 6px;
+		border-bottom-color: #E0E0E0;
+		padding: 15px;
+		margin: 10px;
+		margin-bottom: 15px;
+		width: 100%;
+	}
+	
+	.final-score-item {
+		align-items: center;
+		justify-content: center;
+		flex: 1;
+	}
+	
+	.final-score-label {
+		font-size: 16px;
+		color: #4ECDC4;
+		font-weight: bold;
+		margin-bottom: 8px;
+	}
+	
+	.final-score-value {
+		font-size: 28px;
+		color: #FF6B6B;
+		font-weight: bold;
 	}
 </style>
