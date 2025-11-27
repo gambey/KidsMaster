@@ -17,7 +17,7 @@
 			<view class="size-buttons">
 				<view class="size-button" v-for="size in getAvailableSizes()" :key="size"
 					:class="{ 'size-button-active': gridSize === size }" @click="setGridSize(size)">
-					<text class="size-button-text">{{ size }}x{{size}}</text>
+					<text class="size-button-text" :class="{ 'size-button-text-active': gridSize === size }">{{ size }}x{{size}}</text>
 				</view>
 			</view>
 		</view>
@@ -30,14 +30,14 @@
 					:class="{ 'mode-button-active': gameMode === 'single' }"
 					@click="setGameMode('single')"
 				>
-					<text class="mode-button-text">👤 单人游戏</text>
+					<text class="mode-button-text" :class="{ 'mode-button-text-active': gameMode === 'single' }">👤 单人游戏</text>
 				</view>
 				<view 
 					class="mode-button" 
 					:class="{ 'mode-button-active': gameMode === 'multi' }"
 					@click="setGameMode('multi')"
 				>
-					<text class="mode-button-text">👥 双人游戏</text>
+					<text class="mode-button-text" :class="{ 'mode-button-text-active': gameMode === 'multi' }">👥 双人游戏</text>
 				</view>
 			</view>
 		</view>
@@ -278,7 +278,7 @@
 		height: 45px;
 		background-color: #FFFFFF;
 		border-radius: 10px;
-		border: 3px solid #FFFFFF;
+		border: 3px solid #E0E0E0;
 		border-bottom-width: 6px;
 		border-bottom-color: #E0E0E0;
 		margin: 4px;
@@ -303,7 +303,7 @@
 		color: #4ECDC4;
 	}
 
-	.size-button-active .size-button-text {
+	.size-button-text-active {
 		color: #FFFFFF;
 	}
 	
@@ -337,7 +337,7 @@
 		height: 50px;
 		background-color: #FFFFFF;
 		border-radius: 12px;
-		border: 3px solid #FFFFFF;
+		border: 3px solid #E0E0E0;
 		border-bottom-width: 6px;
 		border-bottom-color: #E0E0E0;
 		align-items: center;
@@ -362,7 +362,7 @@
 		color: #4ECDC4;
 	}
 	
-	.mode-button-active .mode-button-text {
+	.mode-button-text-active {
 		color: #FFFFFF;
 	}
 </style>

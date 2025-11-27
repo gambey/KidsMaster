@@ -20,21 +20,21 @@
 					:class="{ 'difficulty-button-active': difficulty === 'easy' }"
 					@click="setDifficulty('easy')"
 				>
-					<text class="difficulty-button-text">简单</text>
+					<text class="difficulty-button-text" :class="{ 'difficulty-button-text-active': difficulty === 'easy' }">简单</text>
 				</view>
 				<view 
 					class="difficulty-button" 
 					:class="{ 'difficulty-button-active': difficulty === 'normal' }"
 					@click="setDifficulty('normal')"
 				>
-					<text class="difficulty-button-text">标准</text>
+					<text class="difficulty-button-text" :class="{ 'difficulty-button-text-active': difficulty === 'normal' }">标准</text>
 				</view>
 				<view 
 					class="difficulty-button" 
 					:class="{ 'difficulty-button-active': difficulty === 'hard' }"
 					@click="setDifficulty('hard')"
 				>
-					<text class="difficulty-button-text">困难</text>
+					<text class="difficulty-button-text" :class="{ 'difficulty-button-text-active': difficulty === 'hard' }">困难</text>
 				</view>
 			</view>
 		</view>
@@ -208,7 +208,7 @@
 		height: 50px;
 		background-color: #FFFFFF;
 		border-radius: 12px;
-		border: 3px solid #FFFFFF;
+		border: 3px solid #E0E0E0;
 		border-bottom-width: 6px;
 		border-bottom-color: #E0E0E0;
 		margin: 0 5px;
@@ -233,7 +233,7 @@
 		color: #9C27B0;
 	}
 	
-	.difficulty-button-active .difficulty-button-text {
+	.difficulty-button-text-active {
 		color: #FFFFFF;
 	}
 </style>

@@ -43,9 +43,7 @@
 					:class="{ 'cell-clicked': cell.clicked, 'cell-dragging': draggingCell === cell }"
 					:style="{ width: cellSize + 'px', height: cellSize + 'px' }"
 					@click="onCellClick(cell)"
-					@touchstart="onCellTouchStart($event, cell)"
-					@touchmove="onCellTouchMove($event, cell)"
-					@touchend="onCellTouchEnd($event, cell)"
+				
 				>
 					<text class="cell-number" :style="{ fontSize: fontSize + 'px' }">{{ cell.number }}</text>
 				</view>
@@ -61,7 +59,7 @@
 				<text class="drop-zone-label">玩家1</text>
 				<view class="drop-zone-content">
 					<text class="drop-zone-number" v-if="dropZone1Number > 0">{{ dropZone1Number }}</text>
-					<text class="drop-zone-placeholder" v-else>点击数字后<br/>点击这里</text>
+					<text class="drop-zone-placeholder" v-else>点击数字后 点击这里</text>
 				</view>
 			</view>
 			<view 
@@ -72,7 +70,7 @@
 				<text class="drop-zone-label">玩家2</text>
 				<view class="drop-zone-content">
 					<text class="drop-zone-number" v-if="dropZone2Number > 0">{{ dropZone2Number }}</text>
-					<text class="drop-zone-placeholder" v-else>点击数字后<br/>点击这里</text>
+					<text class="drop-zone-placeholder" v-else>点击数字后 点击这里</text>
 				</view>
 			</view>
 		</view>
@@ -203,8 +201,12 @@
 				} else if (this.gridSize <= 8) {
 					this.cellSize = 38
 					this.fontSize = 16
-				} else {
-					this.cellSize = 34
+				} else if (this.gridSize <= 9) {
+					this.cellSize = 36
+					this.fontSize = 16
+				} 
+				else {
+					this.cellSize = 31
 					this.fontSize = 14
 				}
 			},
@@ -281,25 +283,7 @@
 					this.draggingCell = cell
 				}
 			},
-			onCellTouchStart(e: any, cell: GridCell) {
-				if (this.gameFinished || cell.clicked) {
-					return
-				}
-				
-				// 选中单元格用于拖拽
-				if (this.draggingCell === cell) {
-					// 如果已经选中，则取消选中
-					this.draggingCell = null
-				} else {
-					this.draggingCell = cell
-				}
-			},
-			onCellTouchMove(e: any, cell: GridCell) {
-				// 移动时保持选中状态
-			},
-			onCellTouchEnd(e: any, cell: GridCell) {
-				// 触摸结束，保持选中状态直到放入拖放区域
-			},
+		
 			onDropZoneClick(playerIndex: number) {
 				if (this.draggingCell == null || this.gameFinished) {
 					if (this.draggingCell == null) {

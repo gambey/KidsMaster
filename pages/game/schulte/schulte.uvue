@@ -142,8 +142,12 @@
 				} else if (this.gridSize <= 8) {
 					this.cellSize = 38
 					this.fontSize = 16
-				} else {
-					this.cellSize = 34
+				} else if (this.gridSize <= 9) {
+					this.cellSize = 36
+					this.fontSize = 16
+				} 
+				else {
+					this.cellSize = 31
 					this.fontSize = 14
 				}
 			},
