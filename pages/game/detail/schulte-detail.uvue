@@ -2,7 +2,63 @@
 	<view class="container">
 		<view class="header">
 			<text class="title">🧩 舒尔特方格</text>
+			<view class="print-icon" @click="showPrintDialog">
+				<text class="print-icon-text">🖨️</text>
+			</view>
 		</view>
+		
+		<!-- 打印对话框 -->
+		<view class="print-dialog-mask" v-if="showPrintDialogFlag" @click="closePrintDialog">
+			<view class="print-dialog" @click.stop>
+				<view class="print-dialog-header">
+					<text class="print-dialog-title">打印舒尔特方格</text>
+					<view class="print-dialog-close" @click="closePrintDialog">
+						<text class="print-dialog-close-text">✕</text>
+					</view>
+				</view>
+				<view class="print-dialog-content">
+					<text class="print-dialog-label">选择难度：</text>
+					<view class="print-size-buttons">
+						<view 
+							class="print-size-button" 
+							v-for="size in [3, 4, 5, 6, 7, 8, 9, 10]" 
+							:key="size"
+							:class="{ 'print-size-button-active': printGridSize === size }"
+							@click="setPrintGridSize(size)"
+						>
+							<text class="print-size-button-text" :class="{ 'print-size-button-text-active': printGridSize === size }">{{ size }}x{{size}}</text>
+						</view>
+					</view>
+					<view class="print-buttons-row">
+						<view class="print-preview-button" @click="previewPrintImage">
+							<text class="print-preview-button-text">👁️ 预览</text>
+						</view>
+						<view class="print-download-button" @click="downloadPrintImage">
+							<text class="print-download-button-text">📥 下载图片</text>
+						</view>
+					</view>
+					<!-- 预览图片区域 -->
+					<view class="print-preview-container" v-if="previewImageUrl">
+						<image class="print-preview-image" :src="previewImageUrl" mode="aspectFit" @error="onPreviewImageError" @load="onPreviewImageLoad"></image>
+					</view>
+				</view>
+			</view>
+		</view>
+		
+		<!-- Canvas用于生成图片（隐藏） -->
+		<!-- #ifdef H5 || MP-WEIXIN || MP-ALIPAY || MP-BAIDU || MP-TOUTIAO -->
+		<canvas 
+			canvas-id="printCanvas"
+			class="print-canvas"
+		></canvas>
+		<!-- #endif -->
+		<!-- #ifdef APP-ANDROID -->
+		<canvas 
+			id="printCanvas"
+			type="2d"
+			class="print-canvas"
+		></canvas>
+		<!-- #endif -->
 		<view class="game-cover-container">
 			<view class="game-cover">
 				<text class="cover-emoji">🧩</text>
@@ -56,7 +112,10 @@
 			return {
 				gridSize: 3,
 				maxNumber: 10,
-				gameMode: 'single' // 'single' 单人游戏, 'multi' 双人游戏
+				gameMode: 'single', // 'single' 单人游戏, 'multi' 双人游戏
+				showPrintDialogFlag: false,
+				printGridSize: 5, // 打印对话框中的默认难度
+				previewImageUrl: '' // 预览图片URL
 			}
 		},
 		onLoad(options : OnLoadOptions) {
@@ -150,6 +209,428 @@
 						url: `/pages/game/schulte/schulte?autoStart=true&gridSize=${this.gridSize}&gameMode=${this.gameMode}`
 					})
 				}
+			},
+			showPrintDialog() {
+				this.showPrintDialogFlag = true
+			},
+			closePrintDialog() {
+				this.showPrintDialogFlag = false
+				this.previewImageUrl = '' // 关闭对话框时清除预览
+			},
+			setPrintGridSize(size: number) {
+				this.printGridSize = size
+			},
+			generatePrintGrid(size: number): number[][] {
+				// 生成指定大小的随机数字网格
+				const numbers: number[] = []
+				const total = size * size
+				for (let i = 1; i <= total; i++) {
+					numbers.push(i)
+				}
+				// 随机打乱
+				for (let i = numbers.length - 1; i > 0; i--) {
+					const j = Math.floor(Math.random() * (i + 1))
+					const temp = numbers[i]
+					numbers[i] = numbers[j]
+					numbers[j] = temp
+				}
+				
+				// 创建网格
+				const grid: number[][] = []
+				for (let i = 0; i < size; i++) {
+					const row: number[] = []
+					for (let j = 0; j < size; j++) {
+						const index = i * size + j
+						row.push(numbers[index])
+					}
+					grid.push(row)
+				}
+				return grid
+			},
+			generatePrintImage(isPreview: boolean) {
+				// A4尺寸：210mm x 297mm，在300dpi下约为2480x3508像素
+				// 为了适配，使用800x1132像素（接近A4比例）
+				const canvasWidth = 800
+				const canvasHeight = 1132
+				const margin = 40 // 边距
+				const usableWidth = canvasWidth - margin * 2
+				const usableHeight = canvasHeight - margin * 2
+				
+				// 生成网格
+				const grid = this.generatePrintGrid(this.printGridSize)
+				const gridSize = this.printGridSize
+				
+				// 计算每个单元格的大小
+				const cellSize = Math.min(usableWidth / gridSize, usableHeight / gridSize)
+				const gridWidth = cellSize * gridSize
+				const gridHeight = cellSize * gridSize
+				const startX = (canvasWidth - gridWidth) / 2
+				const startY = (canvasHeight - gridHeight) / 2
+				
+				// #ifdef APP-ANDROID
+				// Android 平台暂不支持 canvas 2d API，显示提示信息
+				uni.hideLoading()
+				uni.showToast({
+					title: 'Android 平台暂不支持打印功能',
+					icon: 'none',
+					duration: 2000
+				})
+				// #endif
+				
+				// #ifdef H5
+				// Web平台：使用canvas的toDataURL方法
+				const ctx = uni.createCanvasContext('printCanvas', this)
+				
+				// 设置背景为白色
+				ctx.setFillStyle('#FFFFFF')
+				ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+				
+				// 绘制标题
+				ctx.setFillStyle('#000000')
+				ctx.setFontSize(24)
+				ctx.setTextAlign('center')
+				ctx.fillText(`舒尔特方格 ${gridSize}x${gridSize}`, canvasWidth / 2, margin + 20)
+				
+				// 绘制网格边框
+				ctx.setStrokeStyle('#000000')
+				ctx.setLineWidth(2)
+				
+				// 绘制外边框
+				ctx.strokeRect(startX, startY, gridWidth, gridHeight)
+				
+				// 绘制内部网格线
+				for (let i = 1; i < gridSize; i++) {
+					const x = startX + i * cellSize
+					const y = startY + i * cellSize
+					// 垂直线
+					ctx.beginPath()
+					ctx.moveTo(x, startY)
+					ctx.lineTo(x, startY + gridHeight)
+					ctx.stroke()
+					// 水平线
+					ctx.beginPath()
+					ctx.moveTo(startX, y)
+					ctx.lineTo(startX + gridWidth, y)
+					ctx.stroke()
+				}
+				
+				// 绘制数字
+				ctx.setFillStyle('#000000')
+				ctx.setFontSize(Math.floor(cellSize * 0.4))
+				ctx.setTextAlign('center')
+				ctx.setTextBaseline('middle')
+				
+				for (let i = 0; i < gridSize; i++) {
+					for (let j = 0; j < gridSize; j++) {
+						const x = startX + j * cellSize + cellSize / 2
+						const y = startY + i * cellSize + cellSize / 2
+						ctx.fillText(grid[i][j].toString(), x, y)
+					}
+				}
+				
+				// 绘制底部说明
+				ctx.setFontSize(16)
+				ctx.fillText('请按照1到' + (gridSize * gridSize) + '的顺序依次点击', canvasWidth / 2, canvasHeight - margin)
+				
+				// 绘制完成
+				ctx.draw(false, () => {
+					// 将canvas转为图片
+					setTimeout(() => {
+						// #ifdef H5
+						// Web平台直接使用canvas的toDataURL方法
+						try {
+							// 使用canvas-id查找canvas元素
+							const canvas = document.querySelector('canvas[canvas-id="printCanvas"]') as HTMLCanvasElement
+							if (canvas) {
+								const dataUrl = canvas.toDataURL('image/png')
+								if (isPreview) {
+									this.previewImageUrl = dataUrl
+									setTimeout(() => {
+										uni.hideLoading()
+										uni.showToast({
+											title: '预览已生成',
+											icon: 'success',
+											duration: 1500
+										})
+									}, 100)
+								} else {
+									// 下载模式
+									const link = document.createElement('a')
+									link.href = dataUrl
+									link.download = `schulte-grid-${this.printGridSize}x${this.printGridSize}.png`
+									link.click()
+									uni.hideLoading()
+									uni.showToast({
+										title: '图片已下载',
+										icon: 'success',
+										duration: 2000
+									})
+									this.closePrintDialog()
+								}
+							} else {
+								uni.hideLoading()
+								uni.showToast({
+									title: '无法获取画布',
+									icon: 'none',
+									duration: 2000
+								})
+							}
+						} catch (e) {
+							console.error('Web平台获取canvas失败:', e)
+							uni.hideLoading()
+							uni.showToast({
+								title: '生成预览失败',
+								icon: 'none',
+								duration: 2000
+							})
+						}
+						// #endif
+						// #ifndef H5
+						// 非Web平台使用uni.canvasToTempFilePath
+						uni.canvasToTempFilePath({
+							canvasId: 'printCanvas',
+							width: canvasWidth,
+							height: canvasHeight,
+							destWidth: canvasWidth,
+							destHeight: canvasHeight,
+							success: (res) => {
+								console.log('Canvas生成成功:', res)
+								if (isPreview) {
+									// 预览模式：只显示图片
+									let imageUrl: string | null = null
+									if (res.tempFilePath != null && res.tempFilePath != "") {
+										imageUrl = res.tempFilePath.toString()
+									} else if (res.filePath != null && res.filePath != "") {
+										imageUrl = res.filePath.toString()
+									}
+									console.log('设置预览图片URL:', imageUrl)
+									if (imageUrl != null && imageUrl != "") {
+										this.previewImageUrl = imageUrl
+										// 延迟一下确保视图更新
+										setTimeout(() => {
+											uni.hideLoading()
+											uni.showToast({
+												title: '预览已生成',
+												icon: 'success',
+												duration: 1500
+											})
+										}, 100)
+									} else {
+										uni.hideLoading()
+										uni.showToast({
+											title: '无法获取预览图片路径',
+											icon: 'none',
+											duration: 2000
+										})
+									}
+								} else {
+									// 下载模式：保存到相册
+									uni.saveImageToPhotosAlbum({
+										filePath: res.tempFilePath,
+										success: () => {
+											uni.hideLoading()
+											uni.showToast({
+												title: '图片已保存到相册',
+												icon: 'success',
+												duration: 2000
+											})
+											this.closePrintDialog()
+										},
+										fail: (err) => {
+											console.error('保存图片失败:', err)
+											uni.hideLoading()
+											uni.showToast({
+												title: '请授权相册权限',
+												icon: 'none',
+												duration: 2000
+											})
+										}
+									})
+								}
+							},
+							fail: (err) => {
+								console.error('生成图片失败:', err)
+								uni.hideLoading()
+								uni.showToast({
+									title: '生成图片失败',
+									icon: 'none',
+									duration: 2000
+								})
+							}
+						}, this)
+						// #endif
+					}, 500)
+				})
+				// #endif
+				// #ifdef MP-WEIXIN || MP-ALIPAY || MP-BAIDU || MP-TOUTIAO
+				// 小程序平台：使用uni.createCanvasContext和uni.canvasToTempFilePath
+				const ctx = uni.createCanvasContext('printCanvas', this)
+				
+				// 设置背景为白色
+				ctx.setFillStyle('#FFFFFF')
+				ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+				
+				// 绘制标题
+				ctx.setFillStyle('#000000')
+				ctx.setFontSize(24)
+				ctx.setTextAlign('center')
+				ctx.fillText(`舒尔特方格 ${gridSize}x${gridSize}`, canvasWidth / 2, margin + 20)
+				
+				// 绘制网格边框
+				ctx.setStrokeStyle('#000000')
+				ctx.setLineWidth(2)
+				
+				// 绘制外边框
+				ctx.strokeRect(startX, startY, gridWidth, gridHeight)
+				
+				// 绘制内部网格线
+				for (let i = 1; i < gridSize; i++) {
+					const x = startX + i * cellSize
+					const y = startY + i * cellSize
+					// 垂直线
+					ctx.beginPath()
+					ctx.moveTo(x, startY)
+					ctx.lineTo(x, startY + gridHeight)
+					ctx.stroke()
+					// 水平线
+					ctx.beginPath()
+					ctx.moveTo(startX, y)
+					ctx.lineTo(startX + gridWidth, y)
+					ctx.stroke()
+				}
+				
+				// 绘制数字
+				ctx.setFillStyle('#000000')
+				ctx.setFontSize(Math.floor(cellSize * 0.4))
+				ctx.setTextAlign('center')
+				ctx.setTextBaseline('middle')
+				
+				for (let i = 0; i < gridSize; i++) {
+					for (let j = 0; j < gridSize; j++) {
+						const x = startX + j * cellSize + cellSize / 2
+						const y = startY + i * cellSize + cellSize / 2
+						ctx.fillText(grid[i][j].toString(), x, y)
+					}
+				}
+				
+				// 绘制底部说明
+				ctx.setFontSize(16)
+				ctx.fillText('请按照1到' + (gridSize * gridSize) + '的顺序依次点击', canvasWidth / 2, canvasHeight - margin)
+				
+				// 绘制完成
+				ctx.draw(false, () => {
+					// 将canvas转为图片
+					setTimeout(() => {
+						// 小程序平台使用uni.canvasToTempFilePath
+						uni.canvasToTempFilePath({
+							canvasId: 'printCanvas',
+							width: canvasWidth,
+							height: canvasHeight,
+							destWidth: canvasWidth,
+							destHeight: canvasHeight,
+							success: (res) => {
+								console.log('Canvas生成成功:', res)
+								if (isPreview) {
+									// 预览模式：只显示图片
+									let imageUrl: string | null = null
+									if (res.tempFilePath != null && res.tempFilePath != "") {
+										imageUrl = res.tempFilePath.toString()
+									} else if (res.filePath != null && res.filePath != "") {
+										imageUrl = res.filePath.toString()
+									}
+									console.log('设置预览图片URL:', imageUrl)
+									if (imageUrl != null && imageUrl != "") {
+										this.previewImageUrl = imageUrl
+										// 延迟一下确保视图更新
+										setTimeout(() => {
+											uni.hideLoading()
+											uni.showToast({
+												title: '预览已生成',
+												icon: 'success',
+												duration: 1500
+											})
+										}, 100)
+									} else {
+										uni.hideLoading()
+										uni.showToast({
+											title: '无法获取预览图片路径',
+											icon: 'none',
+											duration: 2000
+										})
+									}
+								} else {
+									// 下载模式：保存到相册
+									uni.saveImageToPhotosAlbum({
+										filePath: res.tempFilePath,
+										success: () => {
+											uni.hideLoading()
+											uni.showToast({
+												title: '图片已保存到相册',
+												icon: 'success',
+												duration: 2000
+											})
+											this.closePrintDialog()
+										},
+										fail: (err) => {
+											console.error('保存图片失败:', err)
+											uni.hideLoading()
+											uni.showToast({
+												title: '请授权相册权限',
+												icon: 'none',
+												duration: 2000
+											})
+										}
+									})
+								}
+							},
+							fail: (err) => {
+								console.error('生成图片失败:', err)
+								uni.hideLoading()
+								uni.showToast({
+									title: '生成图片失败',
+									icon: 'none',
+									duration: 2000
+								})
+							}
+						}, this)
+					}, 500)
+				})
+				// #endif
+			},
+			previewPrintImage() {
+				// 清除之前的预览
+				this.previewImageUrl = ''
+				// 显示加载提示
+				uni.showLoading({
+					title: '生成预览中...',
+					mask: true
+				})
+				// 生成预览图片
+				this.generatePrintImage(true)
+			},
+			downloadPrintImage() {
+				// 显示加载提示
+				uni.showLoading({
+					title: '生成图片中...',
+					mask: true
+				})
+				// 生成并下载图片
+				this.generatePrintImage(false)
+			},
+			onPreviewImageError(e: any) {
+				console.error('预览图片加载失败:', e)
+				uni.showToast({
+					title: '预览图片加载失败',
+					icon: 'none',
+					duration: 2000
+				})
+			},
+			onPreviewImageLoad() {
+				console.log('预览图片加载成功')
+			},
+			saveImgToGallery(imgaeUrl: string) {
+				// 功能已通过 uni.saveImageToPhotosAlbum 实现
+				// 此方法保留为空实现，避免编译错误
 			}
 		}
 	}
@@ -165,6 +646,30 @@
 	.header {
 		margin-top: 10px;
 		margin-bottom: 10px;
+		position: relative;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.print-icon {
+		position: absolute;
+		right: 10px;
+		top: 0;
+		width: 40px;
+		height: 40px;
+		align-items: center;
+		justify-content: center;
+		background-color: #4ECDC4;
+		border-radius: 20px;
+		border: 2px solid #FFFFFF;
+	}
+	
+	.print-icon:active {
+		background-color: #45B8B0;
+	}
+	
+	.print-icon-text {
+		font-size: 20px;
 	}
 
 	.title {
@@ -230,7 +735,7 @@
 		height: 50px;
 		background-color: #FF6B6B;
 		border-radius: 15px;
-		border: 3px solid #FFFFFF;
+		border: 3px solid #E63946;
 		border-bottom-width: 6px;
 		border-bottom-color: #E63946;
 		align-items: center;
@@ -364,5 +869,205 @@
 	
 	.mode-button-text-active {
 		color: #FFFFFF;
+	}
+	
+	/* 打印对话框样式 */
+	.print-dialog-mask {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background-color: rgba(0, 0, 0, 0.5);
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+	}
+	
+	.print-dialog {
+		width: 80%;
+		max-width: 400px;
+		background-color: #FFFFFF;
+		border-radius: 15px;
+		border: 3px solid #4ECDC4;
+		border-bottom-width: 6px;
+		border-bottom-color: #45B8B0;
+		overflow: hidden;
+	}
+	
+	.print-dialog-header {
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		padding: 15px 20px;
+		background-color: #4ECDC4;
+		border-bottom-width: 2px;
+		border-bottom-color: #45B8B0;
+	}
+	
+	.print-dialog-title {
+		font-size: 18px;
+		font-weight: bold;
+		color: #FFFFFF;
+	}
+	
+	.print-dialog-close {
+		width: 30px;
+		height: 30px;
+		align-items: center;
+		justify-content: center;
+		background-color: rgba(255, 255, 255, 0.2);
+		border-radius: 15px;
+	}
+	
+	.print-dialog-close:active {
+		background-color: rgba(255, 255, 255, 0.3);
+	}
+	
+	.print-dialog-close-text {
+		font-size: 20px;
+		color: #FFFFFF;
+		font-weight: bold;
+	}
+	
+	.print-dialog-content {
+		padding: 20px;
+	}
+	
+	.print-dialog-label {
+		font-size: 16px;
+		color: #4ECDC4;
+		font-weight: bold;
+		margin-bottom: 15px;
+		text-align: center;
+	}
+	
+	.print-size-buttons {
+		flex-direction: row;
+		flex-wrap: wrap;
+		justify-content: center;
+		align-items: center;
+		margin-bottom: 20px;
+	}
+	
+	.print-size-button {
+		min-width: 50px;
+		height: 40px;
+		background-color: #FFFFFF;
+		border-radius: 8px;
+		border: 2px solid #E0E0E0;
+		border-bottom-width: 4px;
+		border-bottom-color: #E0E0E0;
+		margin: 4px;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.print-size-button:active {
+		background-color: #F5F5F5;
+		border-bottom-width: 2px;
+	}
+	
+	.print-size-button-active {
+		background-color: #4ECDC4;
+		border-color: #4ECDC4;
+		border-width: 3px;
+	}
+	
+	.print-size-button-text {
+		font-size: 12px;
+		font-weight: bold;
+		color: #4ECDC4;
+	}
+	
+	.print-size-button-text-active {
+		color: #FFFFFF;
+	}
+	
+	.print-buttons-row {
+		flex-direction: row;
+		justify-content: space-between;
+		align-items: center;
+	}
+	
+	.print-preview-button {
+		margin-right: 5px;
+	}
+	
+	.print-download-button {
+		margin-left: 5px;
+	}
+	
+	.print-preview-button {
+		flex: 1;
+		height: 50px;
+		background-color: #4ECDC4;
+		border-radius: 12px;
+		border: 3px solid #45B8B0;
+		border-bottom-width: 6px;
+		border-bottom-color: #45B8B0;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.print-preview-button:active {
+		background-color: #45B8B0;
+		border-bottom-width: 3px;
+	}
+	
+	.print-preview-button-text {
+		font-size: 18px;
+		font-weight: bold;
+		color: #FFFFFF;
+	}
+	
+	.print-download-button {
+		flex: 1;
+		height: 50px;
+		background-color: #FF6B6B;
+		border-radius: 12px;
+		border: 3px solid #E63946;
+		border-bottom-width: 6px;
+		border-bottom-color: #E63946;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.print-download-button:active {
+		background-color: #FF5252;
+		border-bottom-width: 3px;
+	}
+	
+	.print-download-button-text {
+		font-size: 18px;
+		font-weight: bold;
+		color: #FFFFFF;
+	}
+	
+	.print-preview-container {
+		margin-top: 20px;
+		width: 100%;
+		max-height: 400px;
+		background-color: #F5F5F5;
+		border-radius: 10px;
+		border: 2px solid #E0E0E0;
+		align-items: center;
+		justify-content: center;
+		padding: 10px;
+		overflow: hidden;
+	}
+	
+	.print-preview-image {
+		width: 100%;
+		height: 100%;
+		max-height: 380px;
+	}
+	
+	.print-canvas {
+		position: fixed;
+		left: -9999px;
+		top: -9999px;
+		width: 800px;
+		height: 1132px;
 	}
 </style>

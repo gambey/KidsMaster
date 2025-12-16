@@ -386,7 +386,7 @@
 	
 	.cell-clicked .cell-number {
 		color: #CCCCCC;
-		text-decoration: line-through;
+		opacity: 0.5;
 	}
 	
 	.cell-current {
@@ -436,7 +436,7 @@
 		height: 50px;
 		background-color: #4ECDC4;
 		border-radius: 15px;
-		border: 3px solid #FFFFFF;
+		border: 3px solid #3AB5AD;
 		border-bottom-width: 6px;
 		border-bottom-color: #3AB5AD;
 		align-items: center;
@@ -454,7 +454,7 @@
 		height: 50px;
 		background-color: #FFD4B8;
 		border-radius: 15px;
-		border: 3px solid #FFFFFF;
+		border: 3px solid #FFB88C;
 		border-bottom-width: 6px;
 		border-bottom-color: #FFB88C;
 		align-items: center;

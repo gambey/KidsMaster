@@ -1,24 +1,734 @@
 <template>
 	<view class="container">
+		<!-- 顶部标题栏 -->
 		<view class="header">
-			<text class="title">🏠 首页</text>
+			<text class="header-title">首页</text>
+			<view class="settings-button" @click="showSettingsDialog">
+				<text class="settings-icon">⚙️</text>
+			</view>
 		</view>
-		<view class="content">
-			<text class="placeholder">欢迎来到 KidsMaster！</text>
-			<text class="subtitle">这里是首页内容区域</text>
+
+		<!-- 内容区域 -->
+		<scroll-view class="content-scroll" scroll-y="true">
+			<!-- 打卡日历 -->
+			<view class="calendar-section">
+				<view class="calendar-header">
+					<view class="calendar-nav" @click="prevMonth">
+						<text class="nav-arrow">←</text>
+					</view>
+					<text class="calendar-month">{{ currentMonthText }}</text>
+					<view 
+						class="calendar-nav" 
+						:class="{ 'calendar-nav-disabled': !canGoNextMonth }"
+						@click="nextMonth"
+					>
+						<text class="nav-arrow">→</text>
+					</view>
+				</view>
+				<view class="calendar-weekdays">
+					<text class="weekday" v-for="day in weekdays" :key="day">{{ day }}</text>
+				</view>
+				<view class="calendar-days">
+					<view 
+						class="calendar-day" 
+						v-for="(day, index) in calendarDays" 
+						:key="index"
+						:class="{ 
+							'day-other-month': day.isOtherMonth,
+							'day-today': day.isToday,
+							'day-has-stamp': day.hasStamp
+						}"
+					>
+						<text class="day-number">{{ day.date }}</text>
+						<view class="stamp-icons" v-if="day.hasStamp">
+							<text class="stamp-icon child-stamp" v-if="day.childStamped">🐾</text>
+							<text class="stamp-icon parent-stamp" v-if="day.parentStamped">❤️</text>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- 角色切换标签 -->
+			<view class="role-tabs">
+				<view 
+					class="role-tab" 
+					:class="{ 'role-tab-active': currentRole === 'child' }"
+					@click="switchRole('child')"
+				>
+					<text class="role-tab-text">儿童</text>
+				</view>
+				<view 
+					class="role-tab" 
+					:class="{ 'role-tab-active': currentRole === 'parent' }"
+					@click="switchRole('parent')"
+				>
+					<text class="role-tab-text">家长</text>
+				</view>
+			</view>
+
+			<!-- 任务列表 -->
+			<view class="task-list-section">
+				<view 
+					class="task-item" 
+					v-for="task in currentTasks" 
+					:key="task.id"
+				>
+					<text class="task-name">{{ task.name }}</text>
+					<view v-if="task.completed" class="task-completed">
+						<text class="check-icon">✓</text>
+					</view>
+					<view v-else class="task-action" @click="goToCompleteTask(task)">
+						<text class="complete-button">去完成</text>
+					</view>
+				</view>
+				<view v-if="currentTasks.length === 0" class="empty-tasks">
+					<text class="empty-text">暂无任务，请先设置打卡目标</text>
+				</view>
+			</view>
+		</scroll-view>
+
+		<!-- 打卡目标设置对话框 -->
+		<view class="dialog-mask" v-if="showSettings" @click="closeSettingsDialog">
+			<view class="settings-dialog" @click.stop>
+				<view class="dialog-header">
+					<text class="dialog-title">目标项设置</text>
+					<view class="dialog-close" @click="closeSettingsDialog">
+						<text class="close-icon">✕</text>
+					</view>
+				</view>
+				<view class="dialog-content">
+					<!-- 搜索框 -->
+					<view class="search-box">
+						<input 
+							class="search-input" 
+							placeholder="搜索任务..." 
+							v-model="searchKeyword"
+							@input="onSearchInput"
+						/>
+						<text class="search-icon">🔍</text>
+					</view>
+					<!-- 角色切换 -->
+					<view class="dialog-role-tabs">
+						<view 
+							class="dialog-role-tab" 
+							:class="{ 'dialog-role-tab-active': settingsRole === 'child' }"
+							@click="switchSettingsRole('child')"
+						>
+							<text class="dialog-role-tab-text">儿童</text>
+						</view>
+						<view 
+							class="dialog-role-tab" 
+							:class="{ 'dialog-role-tab-active': settingsRole === 'parent' }"
+							@click="switchSettingsRole('parent')"
+						>
+							<text class="dialog-role-tab-text">家长</text>
+						</view>
+					</view>
+					<!-- 任务选择网格 -->
+					<scroll-view class="task-grid-scroll" scroll-y="true">
+						<view class="task-grid">
+							<view 
+								class="task-card" 
+								v-for="task in filteredAvailableTasks" 
+								:key="task.id"
+								@click="toggleTaskSelection(task)"
+							>
+								<view class="task-card-icon">
+									<text class="task-card-emoji">{{ task.icon }}</text>
+								</view>
+								<text class="task-card-name">{{ task.name }}</text>
+								<view class="task-card-check" v-if="isTaskSelected(task)">
+									<text class="task-card-check-icon">✓</text>
+								</view>
+								<view class="task-card-uncheck" v-else>
+									<text class="task-card-uncheck-icon">○</text>
+								</view>
+							</view>
+						</view>
+					</scroll-view>
+				</view>
+				<!-- 确认按钮 - 移到dialog-content外面，固定在底部 -->
+				<view class="dialog-actions">
+					<view class="dialog-button confirm-button" @click="saveTaskSettings">
+						<text class="dialog-button-text">确认</text>
+					</view>
+				</view>
+			</view>
+		</view>
+
+		<!-- 打卡确认对话框 -->
+		<view class="dialog-mask" v-if="showStampDialog" @click="closeStampDialog">
+			<view class="stamp-dialog" @click.stop>
+				<view class="stamp-icon-large">
+					<text class="stamp-emoji">🐾</text>
+					<text class="stamp-date">{{ todayDateText }}</text>
+				</view>
+				<text class="stamp-message">恭喜你完成今日目标</text>
+				<view class="stamp-actions">
+					<view class="stamp-button" @click="confirmStamp">
+						<text class="stamp-button-text">盖章打卡</text>
+					</view>
+					<view class="stamp-button cancel-button" @click="closeStampDialog">
+						<text class="stamp-button-text">取消</text>
+					</view>
+				</view>
+			</view>
 		</view>
 	</view>
 </template>
 
 <script lang="uts">
+	type TaskItem = {
+		id: string
+		name: string
+		icon: string
+		role: string // 'child' | 'parent'
+		path?: string // 跳转路径
+	}
+
+	type TaskItemWithCompleted = {
+		id: string
+		name: string
+		icon: string
+		role: string
+		path?: string
+		completed: boolean
+	}
+
+	type CalendarDay = {
+		date: number
+		isOtherMonth: boolean
+		isToday: boolean
+		hasStamp: boolean
+		childStamped: boolean
+		parentStamped: boolean
+	}
+
+	type DailyTask = {
+		taskId: string
+		completed: boolean
+	}
+
+	type DailyRecord = {
+		date: string // YYYY-MM-DD
+		childTasks: DailyTask[]
+		parentTasks: DailyTask[]
+		childStamped: boolean
+		parentStamped: boolean
+	}
+
+	type TodayTasks = {
+		childTasks: DailyTask[]
+		parentTasks: DailyTask[]
+	}
+
+	type MapEntry = {
+		key: string
+		value: DailyRecord
+	}
+
 	export default {
 		data() {
 			return {
-				
+				currentRole: 'child', // 'child' | 'parent'
+				currentYear: 0,
+				currentMonth: 0,
+				calendarDays: [] as CalendarDay[],
+				weekdays: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
+				showSettings: false,
+				settingsRole: 'child',
+				searchKeyword: '',
+				showStampDialog: false,
+				// 所有可用任务
+				allTasks: [] as TaskItem[],
+				// 当前选中的任务（设置中）
+				selectedTaskIds: [] as string[],
+				// 今日任务记录
+				todayTasks: {
+					childTasks: [] as DailyTask[],
+					parentTasks: [] as DailyTask[]
+				} as TodayTasks,
+				// 打卡记录
+				stampRecords: new Map<string, DailyRecord>()
 			}
 		},
 		onLoad() {
+			this.initData()
+		},
+		onShow() {
+			// 每次显示页面时刷新今日任务状态
+			this.loadTodayTasks()
 			
+			// 检查是否有任务需要标记为完成（从游戏页面返回时）
+			this.checkAndMarkTaskCompleted()
+			
+			// 检查是否全部完成
+			this.checkAllTasksCompleted()
+		},
+		computed: {
+			currentMonthText(): string {
+				const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
+				return months[this.currentMonth]
+			},
+			canGoNextMonth(): boolean {
+				const now = new Date()
+				const currentYear = now.getFullYear()
+				const currentMonth = now.getMonth()
+				
+				// 如果当前显示的月份已经是当前月份或更早，则不能继续前进
+				if (this.currentYear > currentYear) {
+					return false
+				}
+				if (this.currentYear === currentYear && this.currentMonth >= currentMonth) {
+					return false
+				}
+				return true
+			},
+			currentTasks(): TaskItemWithCompleted[] {
+				const roleTasks = this.currentRole === 'child' ? this.todayTasks.childTasks : this.todayTasks.parentTasks
+				const result: TaskItemWithCompleted[] = []
+				for (const dt of roleTasks) {
+					const task = this.allTasks.find(t => t.id === dt.taskId)
+					if (task != null) {
+						result.push({
+							id: task.id,
+							name: task.name,
+							icon: task.icon,
+							role: task.role,
+							path: task.path,
+							completed: dt.completed
+						})
+					}
+				}
+				return result
+			},
+			availableTasks(): TaskItem[] {
+				return this.allTasks.filter(t => t.role === this.settingsRole)
+			},
+			filteredAvailableTasks(): TaskItem[] {
+				if (this.searchKeyword.trim() === '') {
+					return this.availableTasks
+				}
+				const keyword = this.searchKeyword.toLowerCase()
+				return this.availableTasks.filter(t => t.name.toLowerCase().includes(keyword))
+			},
+			todayDateText(): string {
+				const now = new Date()
+				return `${now.getMonth() + 1}月${now.getDate()}日`
+			}
+		},
+		methods: {
+			// 辅助函数：格式化数字为指定位数的字符串
+			padNumber(num: number, length: number): string {
+				let str = num.toString()
+				while (str.length < length) {
+					str = '0' + str
+				}
+				return str
+			},
+			// 辅助函数：格式化日期为 YYYY-MM-DD 格式
+			formatDateKey(year: number, month: number, date: number): string {
+				return `${year}-${this.padNumber(month, 2)}-${this.padNumber(date, 2)}`
+			},
+			// 辅助函数：获取打卡记录
+			getStampRecord(dateKey: string): DailyRecord | null {
+				if (this.stampRecords.has(dateKey)) {
+					return this.stampRecords.get(dateKey) as DailyRecord
+				}
+				return null
+			},
+			// 辅助函数：设置打卡记录
+			setStampRecord(dateKey: string, record: DailyRecord) {
+				this.stampRecords.set(dateKey, record)
+			},
+			initData() {
+				// 初始化所有任务
+				this.allTasks = [
+					{ id: 'schulte', name: '舒尔特方格', icon: '🧩', role: 'child', path: '/pages/game/detail/schulte-detail' },
+					{ id: 'numhearing', name: '听音记数', icon: '🎧', role: 'child', path: '/pages/game/detail/numhearing-detail' },
+					{ id: 'jump-rope', name: '跳绳', icon: '🏃', role: 'child' },
+					{ id: 'reading', name: '阅读', icon: '📖', role: 'child' },
+					{ id: 'training-game', name: '训练游戏', icon: '🎮', role: 'child' },
+					{ id: 'meditation', name: '冥想游戏', icon: '🔤', role: 'child', path: '/pages/game/detail/meditation-detail' },
+					{ id: 'shape', name: '形状识别', icon: '⭐', role: 'child', path: '/pages/game/detail/shape-detail' },
+					{ id: 'memory', name: '记忆挑战', icon: '🧠', role: 'child', path: '/pages/game/detail/memory-detail' },
+					{ id: 'music', name: '音乐节奏', icon: '🎵', role: 'child', path: '/pages/game/detail/music-detail' },
+					{ id: 'love-letter', name: '亲子爱心信', icon: '💌', role: 'parent' },
+					{ id: 'merit-book', name: '功劳簿', icon: '📝', role: 'parent' }
+				]
+
+				// 初始化日期
+				const now = new Date()
+				this.currentYear = now.getFullYear()
+				this.currentMonth = now.getMonth()
+
+				// 加载数据
+				this.loadTaskSettings()
+				this.loadTodayTasks()
+				this.loadStampRecords()
+				this.updateCalendar()
+			},
+			updateCalendar() {
+				const days: CalendarDay[] = []
+				const firstDay = new Date(this.currentYear, this.currentMonth, 1)
+				const lastDay = new Date(this.currentYear, this.currentMonth + 1, 0)
+				const firstDayOfWeek = firstDay.getDay()
+				const today = new Date()
+				const isCurrentMonth = today.getFullYear() === this.currentYear && today.getMonth() === this.currentMonth
+
+				// 上个月的日期
+				const prevMonthLastDay = new Date(this.currentYear, this.currentMonth, 0).getDate()
+				for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+					days.push({
+						date: prevMonthLastDay - i,
+						isOtherMonth: true,
+						isToday: false,
+						hasStamp: false,
+						childStamped: false,
+						parentStamped: false
+					})
+				}
+
+				// 当前月的日期
+				for (let date = 1; date <= lastDay.getDate(); date++) {
+					const isToday = isCurrentMonth && date === today.getDate()
+					const dateKey = this.formatDateKey(this.currentYear, this.currentMonth + 1, date)
+					const record = this.getStampRecord(dateKey)
+					
+					days.push({
+						date: date,
+						isOtherMonth: false,
+						isToday: isToday,
+						hasStamp: record != null && (record.childStamped || record.parentStamped),
+						childStamped: record != null && record.childStamped,
+						parentStamped: record != null && record.parentStamped
+					})
+				}
+
+				// 下个月的日期（填满6行）
+				const remainingDays = 42 - days.length
+				for (let date = 1; date <= remainingDays; date++) {
+					days.push({
+						date: date,
+						isOtherMonth: true,
+						isToday: false,
+						hasStamp: false,
+						childStamped: false,
+						parentStamped: false
+					})
+				}
+
+				this.calendarDays = days
+			},
+			prevMonth() {
+				if (this.currentMonth === 0) {
+					this.currentMonth = 11
+					this.currentYear--
+				} else {
+					this.currentMonth--
+				}
+				this.updateCalendar()
+			},
+			nextMonth() {
+				// 检查是否可以切换到下一个月
+				if (!this.canGoNextMonth) {
+					return
+				}
+				
+				if (this.currentMonth === 11) {
+					this.currentMonth = 0
+					this.currentYear++
+				} else {
+					this.currentMonth++
+				}
+				this.updateCalendar()
+			},
+			switchRole(role: string) {
+				this.currentRole = role
+				this.loadTodayTasks()
+			},
+			showSettingsDialog() {
+				this.showSettings = true
+				this.settingsRole = this.currentRole
+				this.loadTaskSettings()
+			},
+			closeSettingsDialog() {
+				this.showSettings = false
+				this.searchKeyword = ''
+			},
+			switchSettingsRole(role: string) {
+				this.settingsRole = role
+				this.loadTaskSettings()
+			},
+			loadTaskSettings() {
+				try {
+					const key = `taskSettings_${this.settingsRole}`
+					const saved = uni.getStorageSync(key)
+					if (saved != null && saved != "") {
+						this.selectedTaskIds = JSON.parse(saved.toString()) as string[]
+					} else {
+						this.selectedTaskIds = []
+					}
+				} catch (e) {
+					this.selectedTaskIds = []
+				}
+			},
+			isTaskSelected(task: TaskItem): boolean {
+				return this.selectedTaskIds.includes(task.id)
+			},
+			toggleTaskSelection(task: TaskItem) {
+				const index = this.selectedTaskIds.indexOf(task.id)
+				if (index >= 0) {
+					// 取消选择
+					this.selectedTaskIds.splice(index, 1)
+				} else {
+					// 选择
+					this.selectedTaskIds.push(task.id)
+				}
+			},
+			saveTaskSettings() {
+				try {
+					const key = `taskSettings_${this.settingsRole}`
+					uni.setStorageSync(key, JSON.stringify(this.selectedTaskIds))
+					
+					// 更新今日任务
+					this.loadTodayTasks()
+					
+					uni.showToast({
+						title: '设置成功',
+						icon: 'success'
+					})
+					
+					this.closeSettingsDialog()
+				} catch (e) {
+					uni.showToast({
+						title: '保存失败',
+						icon: 'none'
+					})
+				}
+			},
+			loadTodayTasks() {
+				const today = new Date()
+				const dateKey = this.formatDateKey(today.getFullYear(), today.getMonth() + 1, today.getDate())
+				
+				// 加载今日任务设置
+				const childSettings = this.getTaskSettings('child')
+				const parentSettings = this.getTaskSettings('parent')
+				
+				// 加载今日完成记录
+				const record = this.getStampRecord(dateKey)
+				
+				// 构建今日任务
+				const childTasks: DailyTask[] = []
+				for (const taskId of childSettings) {
+					const completed = record != null && record.childTasks.find(t => t.taskId === taskId)?.completed === true
+					childTasks.push({ taskId, completed })
+				}
+				this.todayTasks.childTasks = childTasks
+				
+				const parentTasks: DailyTask[] = []
+				for (const taskId of parentSettings) {
+					const completed = record != null && record.parentTasks.find(t => t.taskId === taskId)?.completed === true
+					parentTasks.push({ taskId, completed })
+				}
+				this.todayTasks.parentTasks = parentTasks
+			},
+			getTaskSettings(role: string): string[] {
+				try {
+					const key = `taskSettings_${role}`
+					const saved = uni.getStorageSync(key)
+					if (saved != null && saved != "") {
+						return JSON.parse(saved.toString()) as string[]
+					}
+				} catch (e) {
+					// 忽略错误
+				}
+				return []
+			},
+			goToCompleteTask(task: TaskItemWithCompleted) {
+				// 保存当前任务ID，用于返回时标记完成
+				try {
+					uni.setStorageSync('currentTaskId', task.id)
+					uni.setStorageSync('currentTaskRole', this.currentRole)
+				} catch (e) {
+					// 忽略错误
+				}
+				
+				if (task.path != null && task.path !== '') {
+					uni.navigateTo({
+						url: task.path
+					})
+				} else {
+					uni.showToast({
+						title: '功能开发中',
+						icon: 'none'
+					})
+				}
+			},
+			checkAllTasksCompleted() {
+				const tasks = this.currentRole === 'child' ? this.todayTasks.childTasks : this.todayTasks.parentTasks
+				if (tasks.length === 0) {
+					return
+				}
+				
+				const allCompleted = tasks.every(t => t.completed)
+				if (allCompleted && !this.showStampDialog) {
+					// 检查今天是否已经打卡
+					const today = new Date()
+					const dateKey = this.formatDateKey(today.getFullYear(), today.getMonth() + 1, today.getDate())
+					const record = this.getStampRecord(dateKey)
+					
+					const alreadyStamped = this.currentRole === 'child' 
+						? (record != null && record.childStamped)
+						: (record != null && record.parentStamped)
+					
+					if (!alreadyStamped) {
+						this.showStampDialog = true
+					}
+				}
+			},
+			confirmStamp() {
+				const today = new Date()
+				const dateKey = this.formatDateKey(today.getFullYear(), today.getMonth() + 1, today.getDate())
+				
+				// 更新打卡记录
+				let record = this.getStampRecord(dateKey)
+				if (record == null) {
+					record = {
+						date: dateKey,
+						childTasks: this.todayTasks.childTasks,
+						parentTasks: this.todayTasks.parentTasks,
+						childStamped: false,
+						parentStamped: false
+					}
+					this.setStampRecord(dateKey, record)
+				}
+				
+				if (this.currentRole === 'child') {
+					record.childStamped = true
+					record.childTasks = this.todayTasks.childTasks
+				} else {
+					record.parentStamped = true
+					record.parentTasks = this.todayTasks.parentTasks
+				}
+				
+				// 保存打卡记录
+				this.saveStampRecords()
+				
+				// 更新日历
+				this.updateCalendar()
+				
+				uni.showToast({
+					title: '打卡成功！',
+					icon: 'success'
+				})
+				
+				this.closeStampDialog()
+			},
+			closeStampDialog() {
+				this.showStampDialog = false
+			},
+			loadStampRecords() {
+				try {
+					const saved = uni.getStorageSync('stampRecords')
+					if (saved != null && saved != "") {
+						const parsed = JSON.parse(saved.toString()) as any
+						this.stampRecords.clear()
+						
+					// 判断是数组格式还是对象格式
+					if (Array.isArray(parsed)) {
+						// 数组格式：[{key, value}, ...]
+						for (let i = 0; i < parsed.length; i++) {
+							const item = parsed[i] as MapEntry
+							if (item != null && item.key != null && item.value != null) {
+								this.stampRecords.set(item.key, item.value)
+							}
+						}
+					} else {
+						// 对象格式：由于 UTS 不支持 Object.keys 和方括号访问
+						// 直接跳过对象格式，只支持数组格式
+						// 如果数据是对象格式，会在下次保存时自动转换为数组格式
+					}
+				} catch (e) {
+					this.stampRecords.clear()
+				}
+			},
+			saveStampRecords() {
+				try {
+					// 将 Map 转换为数组格式，然后序列化
+					// 使用 Map 的 forEach 方法遍历
+					const mapArray: MapEntry[] = []
+					this.stampRecords.forEach((value, key) => {
+						mapArray.push({
+							key: key,
+							value: value
+						})
+					})
+					uni.setStorageSync('stampRecords', JSON.stringify(mapArray))
+				} catch (e) {
+					// 忽略错误
+				}
+			},
+			onSearchInput() {
+				// 搜索功能已通过computed实现
+			},
+			// 检查并标记任务完成（从游戏页面返回时）
+			checkAndMarkTaskCompleted() {
+				try {
+					const taskId = uni.getStorageSync('currentTaskId')
+					const taskRole = uni.getStorageSync('currentTaskRole')
+					const taskCompleted = uni.getStorageSync('taskCompleted')
+					
+					if (taskId != null && taskId !== '' && taskCompleted === true) {
+						// 清除标记
+						uni.removeStorageSync('currentTaskId')
+						uni.removeStorageSync('currentTaskRole')
+						uni.removeStorageSync('taskCompleted')
+						
+						// 标记任务完成
+						this.markTaskCompleted(taskId.toString(), taskRole != null ? taskRole.toString() : this.currentRole)
+					}
+				} catch (e) {
+					// 忽略错误
+				}
+			},
+			// 标记任务完成
+			markTaskCompleted(taskId: string, role: string) {
+				const today = new Date()
+				const dateKey = this.formatDateKey(today.getFullYear(), today.getMonth() + 1, today.getDate())
+				
+				// 确保记录存在
+				let record = this.getStampRecord(dateKey)
+				if (record == null) {
+					record = {
+						date: dateKey,
+						childTasks: this.todayTasks.childTasks,
+						parentTasks: this.todayTasks.parentTasks,
+						childStamped: false,
+						parentStamped: false
+					}
+					this.setStampRecord(dateKey, record)
+				}
+				
+				// 更新任务完成状态
+				const tasks = role === 'child' ? record.childTasks : record.parentTasks
+				const task = tasks.find(t => t.taskId === taskId)
+				if (task != null) {
+					task.completed = true
+				} else {
+					tasks.push({ taskId, completed: true })
+				}
+				
+				// 更新今日任务
+				if (role === 'child') {
+					this.todayTasks.childTasks = tasks
+				} else {
+					this.todayTasks.parentTasks = tasks
+				}
+				
+				// 保存记录
+				this.saveStampRecords()
+			}
 		}
 	}
 </script>
@@ -26,44 +736,546 @@
 <style>
 	.container {
 		flex: 1;
-		background-color: #FFD4B8;
-		padding: 20px;
+		background-color: #F5F5F5;
 	}
-	
+
+	/* 顶部标题栏 */
 	.header {
-		margin-top: 40px;
-		margin-bottom: 30px;
-	}
-	
-	.title {
-		font-size: 32px;
-		font-weight: bold;
-		color: #FFFFFF;
-		text-align: center;
-		background-color: #FF6B6B;
-		padding: 8px 16px;
-		border-radius: 8px;
-		border: 2px solid #FFFFFF;
-	}
-	
-	.content {
-		flex: 1;
-		justify-content: center;
+		height: 50px;
+		background-color: #E0E0E0;
+		flex-direction: row;
 		align-items: center;
-		padding: 20px;
+		justify-content: center;
+		position: relative;
+		padding: 0 15px;
 	}
-	
-	.placeholder {
-		font-size: 24px;
-		color: #4ECDC4;
-		font-weight: bold;
-		margin-bottom: 15px;
-		text-align: center;
-	}
-	
-	.subtitle {
+
+	.header-title {
 		font-size: 18px;
-		color: #95E1D3;
+		font-weight: bold;
+		color: #333333;
+	}
+
+	.settings-button {
+		position: absolute;
+		right: 15px;
+		width: 30px;
+		height: 30px;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.settings-icon {
+		font-size: 20px;
+	}
+
+	.content-scroll {
+		flex: 1;
+	}
+
+	/* 日历区域 */
+	.calendar-section {
+		background-color: #FFFFFF;
+		margin: 15px;
+		border-radius: 12px;
+		padding: 10px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+		height: 200px;
+		overflow: hidden;
+	}
+
+	.calendar-header {
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 6px;
+		height: 28px;
+	}
+
+	.calendar-nav {
+		width: 24px;
+		height: 24px;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.calendar-nav-disabled {
+		opacity: 0.3;
+	}
+
+	.calendar-nav-disabled:active {
+		opacity: 0.3;
+	}
+
+	.nav-arrow {
+		font-size: 14px;
+		color: #666666;
+	}
+
+	.calendar-nav-disabled .nav-arrow {
+		color: #CCCCCC;
+	}
+
+	.calendar-month {
+		font-size: 14px;
+		font-weight: bold;
+		color: #333333;
+	}
+
+	.calendar-weekdays {
+		flex-direction: row;
+		margin-bottom: 4px;
+		height: 18px;
+	}
+
+	.weekday {
+		flex: 1;
 		text-align: center;
+		font-size: 10px;
+		color: #999999;
+		padding: 2px 0;
+	}
+
+	.calendar-days {
+		flex-direction: row;
+		flex-wrap: wrap;
+		width: 100%;
+	}
+
+	.calendar-day {
+		width: 14.14%;
+		height: 24px;
+		align-items: center;
+		justify-content: center;
+		position: relative;
+		border-radius: 4px;
+		margin-right: 0;
+		margin-bottom: 2px;
+		box-sizing: border-box;
+	}
+
+	.day-number {
+		font-size: 11px;
+		color: #333333;
+	}
+
+	.calendar-day.day-other-month .day-number {
+		color: #CCCCCC;
+	}
+
+	.calendar-day.day-today {
+		background-color: #4A90E2;
+	}
+
+	.calendar-day.day-today .day-number {
+		color: #FFFFFF;
+		font-weight: bold;
+	}
+
+	.stamp-icons {
+		position: absolute;
+		bottom: 0px;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.stamp-icon {
+		font-size: 7px;
+		margin: 0 1px;
+	}
+
+	/* 角色切换标签 */
+	.role-tabs {
+		flex-direction: row;
+		margin: 0 15px 15px 15px;
+		background-color: #FFFFFF;
+		border-radius: 12px;
+		padding: 5px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	}
+
+	.role-tab {
+		flex: 1;
+		align-items: center;
+		justify-content: center;
+		padding: 10px 0;
+		border-radius: 8px;
+	}
+
+	.role-tab-active {
+		background-color: #4A90E2;
+	}
+
+	.role-tab-text {
+		font-size: 16px;
+		color: #666666;
+	}
+
+	.role-tab-active .role-tab-text {
+		color: #FFFFFF;
+		font-weight: bold;
+	}
+
+	/* 任务列表 */
+	.task-list-section {
+		background-color: #FFFFFF;
+		margin: 0 15px 15px 15px;
+		border-radius: 12px;
+		padding: 15px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	}
+
+	.task-item {
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		padding: 15px 0;
+		border-bottom-width: 1px;
+		border-bottom-color: #F0F0F0;
+		border-bottom-style: solid;
+	}
+
+	.task-item:last-child {
+		border-bottom-width: 0;
+	}
+
+	.task-name {
+		font-size: 16px;
+		color: #333333;
+		flex: 1;
+	}
+
+	.task-completed {
+		width: 24px;
+		height: 24px;
+		background-color: #4CAF50;
+		border-radius: 12px;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.check-icon {
+		font-size: 16px;
+		color: #FFFFFF;
+		font-weight: bold;
+	}
+
+	.task-action {
+		padding: 6px 15px;
+		background-color: #4CAF50;
+		border-radius: 6px;
+	}
+
+	.task-action:active {
+		background-color: #45A049;
+		opacity: 0.8;
+	}
+
+	.complete-button {
+		font-size: 14px;
+		color: #FFFFFF;
+		font-weight: 400;
+	}
+
+	.empty-tasks {
+		padding: 30px 0;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.empty-text {
+		font-size: 14px;
+		color: #999999;
+	}
+
+	/* 对话框遮罩 */
+	.dialog-mask {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background-color: rgba(0, 0, 0, 0.5);
+		align-items: center;
+		justify-content: center;
+		z-index: 999;
+	}
+
+	/* 设置对话框 */
+	.settings-dialog {
+		width: 90%;
+		max-width: 500px;
+		height: 600px;
+		background-color: #FFFFFF;
+		border-radius: 16px;
+		overflow: hidden;
+		flex-direction: column;
+	}
+
+	.dialog-header {
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		padding: 20px;
+		border-bottom-width: 1px;
+		border-bottom-color: #F0F0F0;
+		border-bottom-style: solid;
+	}
+
+	.dialog-title {
+		font-size: 18px;
+		font-weight: bold;
+		color: #333333;
+	}
+
+	.dialog-close {
+		width: 30px;
+		height: 30px;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.close-icon {
+		font-size: 20px;
+		color: #999999;
+	}
+
+	.dialog-content {
+		padding: 20px;
+		flex: 1;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.search-box {
+		flex-direction: row;
+		align-items: center;
+		background-color: #F5F5F5;
+		border-radius: 8px;
+		padding: 10px 15px;
+		margin-bottom: 15px;
+	}
+
+	.search-input {
+		flex: 1;
+		font-size: 14px;
+		color: #333333;
+	}
+
+	.search-icon {
+		font-size: 16px;
+		margin-left: 10px;
+	}
+
+	.dialog-role-tabs {
+		flex-direction: row;
+		margin-bottom: 15px;
+		background-color: #F5F5F5;
+		border-radius: 8px;
+		padding: 4px;
+	}
+
+	.dialog-role-tab {
+		flex: 1;
+		align-items: center;
+		justify-content: center;
+		padding: 8px 0;
+		border-radius: 6px;
+	}
+
+	.dialog-role-tab-active {
+		background-color: #4A90E2;
+	}
+
+	.dialog-role-tab-text {
+		font-size: 14px;
+		color: #666666;
+	}
+
+	.dialog-role-tab-active .dialog-role-tab-text {
+		color: #FFFFFF;
+		font-weight: bold;
+	}
+
+	.task-grid-scroll {
+		flex: 1;
+		min-height: 0;
+		height: 350px;
+		margin-bottom: 0;
+	}
+
+	.task-grid {
+		flex-direction: row;
+		flex-wrap: wrap;
+		justify-content: space-between;
+	}
+
+	.task-card {
+		width: 48%;
+		background-color: #F9F9F9;
+		border-radius: 12px;
+		padding: 15px;
+		margin-bottom: 12px;
+		align-items: center;
+		position: relative;
+		border: 2px solid transparent;
+	}
+
+	.task-card:active {
+		background-color: #F0F0F0;
+	}
+
+	.task-card-icon {
+		width: 50px;
+		height: 50px;
+		background-color: #FFFFFF;
+		border-radius: 10px;
+		align-items: center;
+		justify-content: center;
+		margin-bottom: 10px;
+	}
+
+	.task-card-emoji {
+		font-size: 28px;
+	}
+
+	.task-card-name {
+		font-size: 14px;
+		color: #333333;
+		text-align: center;
+	}
+
+	.task-card-check {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		width: 24px;
+		height: 24px;
+		background-color: #4CAF50;
+		border-radius: 12px;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.task-card-check-icon {
+		font-size: 14px;
+		color: #FFFFFF;
+		font-weight: bold;
+	}
+
+	.task-card-uncheck {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		width: 24px;
+		height: 24px;
+		border-width: 2px;
+		border-color: #CCCCCC;
+		border-radius: 12px;
+		border-style: solid;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.task-card-uncheck-icon {
+		font-size: 12px;
+		color: #CCCCCC;
+	}
+
+	.dialog-actions {
+		padding: 15px 20px 20px 20px;
+		border-top-width: 1px;
+		border-top-color: #F0F0F0;
+		border-top-style: solid;
+		background-color: #FFFFFF;
+		flex-shrink: 0;
+	}
+
+	.dialog-button {
+		width: 100%;
+		background-color: #4A90E2;
+		border-radius: 8px;
+		padding: 12px 0;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.dialog-button:active {
+		background-color: #3A7BC8;
+	}
+
+	.dialog-button-text {
+		font-size: 16px;
+		color: #FFFFFF;
+		font-weight: bold;
+	}
+
+	/* 打卡确认对话框 */
+	.stamp-dialog {
+		width: 80%;
+		max-width: 300px;
+		background-color: #FFFFFF;
+		border-radius: 16px;
+		padding: 30px 20px;
+		align-items: center;
+	}
+
+	.stamp-icon-large {
+		align-items: center;
+		justify-content: center;
+		margin-bottom: 20px;
+	}
+
+	.stamp-emoji {
+		font-size: 60px;
+		margin-bottom: 10px;
+	}
+
+	.stamp-date {
+		font-size: 14px;
+		color: #666666;
+	}
+
+	.stamp-message {
+		font-size: 18px;
+		color: #333333;
+		font-weight: bold;
+		margin-bottom: 25px;
+		text-align: center;
+	}
+
+	.stamp-actions {
+		width: 100%;
+		flex-direction: row;
+		justify-content: space-between;
+	}
+
+	.stamp-button {
+		flex: 1;
+		background-color: #4CAF50;
+		border-radius: 8px;
+		padding: 12px 0;
+		align-items: center;
+		justify-content: center;
+		margin: 0 5px;
+	}
+
+	.stamp-button:active {
+		background-color: #45A049;
+	}
+
+	.cancel-button {
+		background-color: #CCCCCC;
+	}
+
+	.cancel-button:active {
+		background-color: #BBBBBB;
+	}
+
+	.stamp-button-text {
+		font-size: 14px;
+		color: #FFFFFF;
+		font-weight: bold;
 	}
 </style>
