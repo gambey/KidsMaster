@@ -23,12 +23,7 @@ export function login(phoneNumber: string, password: string, callback: (result: 
 	// #region agent log
 	const requestUrl = `${BASE_URL}/auth/login`
 	const systemInfo = uni.getSystemInfoSync()
-	fetch('http://127.0.0.1:7242/ingest/33e7f386-bbd4-437e-aeca-a464d0e66831',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.uts:21',message:'login function called',data:{url:requestUrl,phoneNumber:phoneNumber,platform:systemInfo.platform,osName:systemInfo.osName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
-	// #endregion
 	
-	// #region agent log
-	fetch('http://127.0.0.1:7242/ingest/33e7f386-bbd4-437e-aeca-a464d0e66831',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.uts:29',message:'before uni.request call',data:{url:requestUrl,method:'POST',hasHeader:true,hasData:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F,G,H'})}).catch(()=>{});
-	// #endregion
 	
 	uni.request({
 		url: requestUrl,
@@ -42,20 +37,14 @@ export function login(phoneNumber: string, password: string, callback: (result: 
 			password: password
 		},
 		success: (res: any) => {
-			// #region agent log
-			fetch('http://127.0.0.1:7242/ingest/33e7f386-bbd4-437e-aeca-a464d0e66831',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.uts:32',message:'login request success callback',data:{statusCode:res?.statusCode,hasData:res?.data!=null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
-			// #endregion
+
 			let ok = false
 			let token = ''
 			let msg = '登陆成功'
-			
-			console.log('login response:', JSON.stringify(res))
-			
+
 			if (res != null && (res.statusCode === 200 || res.statusCode === 201)) {
-				const data:LoginResponse = res.data as LoginResponse | null
+				const data:LoginResponse = res.data as LoginResponse
 				if (data != null) {
-					console.log('login response data:', JSON.stringify(data))
-					
 					// 检查code字段，通常0表示成功
 					if (data.code != null) {
 						if (data.code === 0 || data.code === 200|| data.code === 201) {
@@ -128,18 +117,10 @@ export function login(phoneNumber: string, password: string, callback: (result: 
 			const errMsg = err != null && err.errMsg != null ? err.errMsg.toString() : ''
 			const errCode = err != null && err.errCode != null ? err.errCode.toString() : ''
 			const errSubject = err != null && err.errSubject != null ? err.errSubject.toString() : ''
-			fetch('http://127.0.0.1:7242/ingest/33e7f386-bbd4-437e-aeca-a464d0e66831',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.uts:120',message:'login request fail callback executed',data:{error:errStr,errorType:errType,errorKeys:errKeys,errMsg:errMsg,errCode:errCode,errSubject:errSubject,url:requestUrl,baseUrl:BASE_URL,platform:systemInfo.platform},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'F,G,H,I'})}).catch(()=>{});
+			
 			// #endregion
 			console.error('login request fail:', err)
-			
-			// 根据错误信息判断是否是 CORS 问题
 			let errorMessage = '网络异常，请稍后重试'
-			if (errCode === '5' || (errMsg != null && errMsg.indexOf('fail') >= 0)) {
-				// 可能是 CORS 问题，提供更详细的错误信息
-				if (systemInfo.platform === 'devtools' || systemInfo.platform === 'macos') {
-					errorMessage = '网络请求失败，可能是跨域问题。请检查后端服务器是否配置了 CORS，允许前端域名访问。'
-				}
-			}
 			
 			callback({
 				success: false,

@@ -282,17 +282,17 @@
 				const ctx = uni.createCanvasContext('printCanvas', this)
 				
 				// 设置背景为白色
-				ctx.setFillStyle('#FFFFFF')
+				ctx.setFillStyle('#FFFFFF' as any)
 				ctx.fillRect(0, 0, canvasWidth, canvasHeight)
 				
 				// 绘制标题
-				ctx.setFillStyle('#000000')
+				ctx.setFillStyle('#000000' as any)
 				ctx.setFontSize(24)
 				ctx.setTextAlign('center')
 				ctx.fillText(`舒尔特方格 ${gridSize}x${gridSize}`, canvasWidth / 2, margin + 20)
 				
 				// 绘制网格边框
-				ctx.setStrokeStyle('#000000')
+				ctx.setStrokeStyle('#000000' as any)
 				ctx.setLineWidth(2)
 				
 				// 绘制外边框
@@ -315,7 +315,7 @@
 				}
 				
 				// 绘制数字
-				ctx.setFillStyle('#000000')
+				ctx.setFillStyle('#000000' as any)
 				ctx.setFontSize(Math.floor(cellSize * 0.4))
 				ctx.setTextAlign('center')
 				ctx.setTextBaseline('middle')
@@ -467,17 +467,17 @@
 				const ctx = uni.createCanvasContext('printCanvas', this)
 				
 				// 设置背景为白色
-				ctx.setFillStyle('#FFFFFF')
+				ctx.setFillStyle('#FFFFFF' as any)
 				ctx.fillRect(0, 0, canvasWidth, canvasHeight)
 				
 				// 绘制标题
-				ctx.setFillStyle('#000000')
+				ctx.setFillStyle('#000000' as any)
 				ctx.setFontSize(24)
 				ctx.setTextAlign('center')
 				ctx.fillText(`舒尔特方格 ${gridSize}x${gridSize}`, canvasWidth / 2, margin + 20)
 				
 				// 绘制网格边框
-				ctx.setStrokeStyle('#000000')
+				ctx.setStrokeStyle('#000000' as any)
 				ctx.setLineWidth(2)
 				
 				// 绘制外边框
@@ -500,7 +500,7 @@
 				}
 				
 				// 绘制数字
-				ctx.setFillStyle('#000000')
+				ctx.setFillStyle('#000000' as any)
 				ctx.setFontSize(Math.floor(cellSize * 0.4))
 				ctx.setTextAlign('center')
 				ctx.setTextBaseline('middle')
