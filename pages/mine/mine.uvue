@@ -3,6 +3,20 @@
 		<view class="header">
 			<text class="title">👤 我的</text>
 		</view>
+		<!-- 头像与登录 -->
+		<view class="profile-section">
+			<view class="avatar-wrapper">
+				<image class="avatar" :src="avatarUrl" mode="aspectFill"></image>
+			</view>
+			<!-- 未登录时显示登录按钮 -->
+			<view class="auth-button" v-if="!isLoggedIn" @click="openAuthDialog">
+				<text class="auth-button-text">注册 / 登陆</text>
+			</view>
+			<!-- 已登录时显示手机号 -->
+			<view class="phone-number" v-if="isLoggedIn">
+				<text class="phone-number-text">{{ authPhoneNumber }}</text>
+			</view>
+		</view>
 		<view class="content">
 			<view class="menu-list">
 				<view class="menu-item" @click="handleMenuClick('档案')">
@@ -27,20 +41,141 @@
 				</view>
 			</view>
 		</view>
+		
+		<!-- 退出账号按钮 -->
+		<view class="logout-section" v-if="isLoggedIn">
+			<view class="logout-button" @click="handleLogout">
+				<text class="logout-button-text">退出账号</text>
+			</view>
+		</view>
+
+		<!-- 注册/登陆弹窗 -->
+		<view class="dialog-mask" v-if="showAuthDialog" @click="closeAuthDialog">
+			<view class="auth-dialog" @click.stop>
+				<view class="auth-dialog-header">
+					<text class="auth-dialog-title">注册 / 登陆</text>
+					<view class="dialog-close" @click="closeAuthDialog">
+						<text class="close-icon">✕</text>
+					</view>
+				</view>
+				<view class="auth-dialog-content">
+					<input class="auth-input" v-model="phoneNumber" placeholder="请输入手机号" />
+					<input class="auth-input" v-model="password" placeholder="请输入密码" password />
+					<view class="dialog-actions">
+						<view class="dialog-button confirm-button" @click="submitAuth">
+							<text class="dialog-button-text">确认</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		</view>
 	</view>
 </template>
 
 <script lang="uts">
+	import { login } from '../../utils/api.uts'
 	export default {
 		data() {
 			return {
-				
+				avatarUrl: 'https://qiniu-web-assets.dcloud.net.cn/unidoc/zh/unicloudlogo.png',
+				showAuthDialog: false,
+				phoneNumber: '',
+				password: '',
+				authToken: '',
+				authPhoneNumber: ''
+			}
+		},
+		computed: {
+			isLoggedIn(): boolean {
+				return this.authToken != null && this.authToken != '' && this.authPhoneNumber != null && this.authPhoneNumber != ''
 			}
 		},
 		onLoad() {
-			
+			this.loadAuthInfo()
 		},
 		methods: {
+			openAuthDialog() {
+				this.showAuthDialog = true
+			},
+			closeAuthDialog() {
+				this.showAuthDialog = false
+			},
+			submitAuth() {
+				const name = this.phoneNumber.trim()
+				const pwd = this.password.trim()
+				if (name === '' || pwd === '') {
+					uni.showToast({
+						title: '请输入手机号和密码',
+						icon: 'none'
+					})
+					return
+				}
+				uni.showLoading({
+					title: '登陆中...',
+					mask: true
+				})
+				
+				login(name, pwd, (res: any) => {
+					uni.hideLoading()
+					if (res.success) {
+						this.authToken = res.token
+						this.authPhoneNumber = name
+						try {
+							uni.setStorageSync('authToken', res.token)
+							uni.setStorageSync('authPhoneNumber', name)
+						} catch (e) {
+							console.error('保存token失败:', e)
+						}
+						uni.showToast({
+							title: res.message || '登录成功',
+							icon: 'success'
+						})
+						this.closeAuthDialog()
+						// 清空输入框
+						this.phoneNumber = ''
+						this.password = ''
+					} else {
+						uni.showToast({
+							title: res.message || '登录失败',
+							icon: 'none'
+						})
+					}
+				})
+			},
+			loadAuthInfo() {
+				try {
+					const token = uni.getStorageSync('authToken')
+					const phone = uni.getStorageSync('authPhoneNumber')
+					if (token != null && token != '' && phone != null && phone != '') {
+						this.authToken = token.toString()
+						this.authPhoneNumber = phone.toString()
+					}
+				} catch (e) {
+					console.error('加载登录信息失败:', e)
+				}
+			},
+			handleLogout() {
+				uni.showModal({
+					title: '提示',
+					content: '确定要退出账号吗？',
+					success: (res: any) => {
+						if (res.confirm) {
+							this.authToken = ''
+							this.authPhoneNumber = ''
+							try {
+								uni.removeStorageSync('authToken')
+								uni.removeStorageSync('authPhoneNumber')
+							} catch (e) {
+								console.error('清除登录信息失败:', e)
+							}
+							uni.showToast({
+								title: '已退出账号',
+								icon: 'success'
+							})
+						}
+					}
+				})
+			},
 			handleMenuClick(menuName: string) {
 				// 根据菜单名称执行相应操作
 				switch (menuName) {
@@ -97,6 +232,59 @@
 		margin-bottom: 30px;
 	}
 	
+	.profile-section {
+		align-items: center;
+		margin-bottom: 20px;
+	}
+	
+	.avatar-wrapper {
+		width: 120px;
+		height: 120px;
+		border-radius: 60px;
+		overflow: hidden;
+		border: 4px solid #FFFFFF;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+		margin-bottom: 12px;
+		background-color: #FFFFFF;
+	}
+	
+	.avatar {
+		width: 100%;
+		height: 100%;
+	}
+	
+	.auth-button {
+		padding: 10px 20px;
+		background-color: #F368E0;
+		border-radius: 20px;
+		border: 2px solid #FFFFFF;
+		box-shadow: 0 3px 10px rgba(243, 104, 224, 0.25);
+	}
+	
+	.auth-button:active {
+		opacity: 0.9;
+	}
+	
+	.auth-button-text {
+		font-size: 16px;
+		color: #FFFFFF;
+		font-weight: bold;
+	}
+	
+	.phone-number {
+		margin-top: 8px;
+		padding: 8px 16px;
+		background-color: #FFFFFF;
+		border-radius: 20px;
+		border: 2px solid #F368E0;
+	}
+	
+	.phone-number-text {
+		font-size: 16px;
+		color: #F368E0;
+		font-weight: bold;
+	}
+	
 	.title {
 		font-size: 32px;
 		font-weight: bold;
@@ -146,5 +334,124 @@
 		font-size: 20px;
 		font-weight: bold;
 		color: #F368E0;
+	}
+
+	/* 弹窗样式 */
+	.dialog-mask {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background-color: rgba(0, 0, 0, 0.5);
+		align-items: center;
+		justify-content: center;
+		z-index: 999;
+	}
+	
+	.auth-dialog {
+		width: 90%;
+		max-width: 480px;
+		background-color: #FFFFFF;
+		border-radius: 16px;
+		overflow: hidden;
+	}
+	
+	.auth-dialog-header {
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		padding: 16px 18px;
+		border-bottom-width: 1px;
+		border-bottom-color: #F0F0F0;
+		border-bottom-style: solid;
+	}
+	
+	.auth-dialog-title {
+		font-size: 18px;
+		font-weight: bold;
+		color: #333333;
+	}
+	
+	.dialog-close {
+		width: 30px;
+		height: 30px;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.close-icon {
+		font-size: 18px;
+		color: #999999;
+	}
+	
+	.auth-dialog-content {
+		padding: 18px;
+	}
+	
+	.auth-input {
+		width: 100%;
+		height: 44px;
+		border-width: 1px;
+		border-color: #E0E0E0;
+		border-style: solid;
+		border-radius: 10px;
+		padding: 10px 12px;
+		font-size: 14px;
+		color: #333333;
+		margin-bottom: 12px;
+		background-color: #FAFAFA;
+	}
+	
+	.dialog-actions {
+		margin-top: 10px;
+	}
+	
+	.dialog-button {
+		width: 100%;
+		background-color: #F368E0;
+		border-radius: 10px;
+		padding: 12px 0;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.dialog-button:active {
+		background-color: #e35acb;
+	}
+	
+	.dialog-button-text {
+		font-size: 16px;
+		color: #FFFFFF;
+		font-weight: bold;
+	}
+	
+	/* 退出账号按钮样式 */
+	.logout-section {
+		width: 100%;
+		padding: 20px;
+		align-items: center;
+	}
+	
+	.logout-button {
+		width: 100%;
+		padding: 12px 20px;
+		background-color: #FF6B6B;
+		border-radius: 20px;
+		border: 2px solid #FFFFFF;
+		box-shadow: 0 3px 10px rgba(255, 107, 107, 0.25);
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.logout-button:active {
+		opacity: 0.9;
+		background-color: #ff5252;
+	}
+	
+	.logout-button-text {
+		font-size: 16px;
+		color: #FFFFFF;
+		font-weight: bold;
 	}
 </style>

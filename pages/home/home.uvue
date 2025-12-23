@@ -628,28 +628,33 @@
 			closeStampDialog() {
 				this.showStampDialog = false
 			},
-			loadStampRecords() {
+			loadStampRecords() 
+			{
 				try {
 					const saved = uni.getStorageSync('stampRecords')
-					if (saved != null && saved != "") {
+					if (saved != null && saved != "") 
+					{
 						const parsed = JSON.parse(saved.toString()) as any
 						this.stampRecords.clear()
 						
-					// 判断是数组格式还是对象格式
-					if (Array.isArray(parsed)) {
-						// 数组格式：[{key, value}, ...]
-						for (let i = 0; i < parsed.length; i++) {
-							const item = parsed[i] as MapEntry
-							if (item != null && item.key != null && item.value != null) {
-								this.stampRecords.set(item.key, item.value)
+						// 判断是数组格式还是对象格式
+						if (Array.isArray(parsed)) {
+							// 数组格式：[{key, value}, ...]
+							for (let i = 0; i < parsed.length; i++) {
+								const item = parsed[i] as MapEntry
+								if (item != null && item.key != null && item.value != null) {
+									this.stampRecords.set(item.key, item.value)
+								}
 							}
+						} else {
+							// 对象格式：由于 UTS 不支持 Object.keys 和方括号访问
+							// 直接跳过对象格式，只支持数组格式
+							// 如果数据是对象格式，会在下次保存时自动转换为数组格式
 						}
-					} else {
-						// 对象格式：由于 UTS 不支持 Object.keys 和方括号访问
-						// 直接跳过对象格式，只支持数组格式
-						// 如果数据是对象格式，会在下次保存时自动转换为数组格式
 					}
-				} catch (e) {
+				} 
+				catch (e) 
+				{
 					this.stampRecords.clear()
 				}
 			},
@@ -665,7 +670,9 @@
 						})
 					})
 					uni.setStorageSync('stampRecords', JSON.stringify(mapArray))
-				} catch (e) {
+				} 
+				catch (e) 
+				{
 					// 忽略错误
 				}
 			},
