@@ -1,0 +1,409 @@
+<template>
+	<view class="container">
+		<view class="header">
+			<view class="back-button" @click="goBack">
+				<text class="back-icon">←</text>
+			</view>
+			<view class="delete-button" @click="handleDelete">
+				<text class="delete-icon">🗑</text>
+			</view>
+		</view>
+		
+		<view class="content">
+			<view class="avatar-section">
+				<view class="avatar-wrapper" @click="chooseAvatar">
+					<image class="avatar" v-if="avatarUrl != ''" :src="avatarUrl" mode="aspectFill"></image>
+					<text class="avatar-placeholder" v-else>添加头像</text>
+				</view>
+			</view>
+			
+			<view class="form-section">
+				<view class="form-item">
+					<text class="form-label">小名</text>
+					<input class="form-input" v-model="nickname" placeholder="请输入小名" />
+				</view>
+				
+				<view class="form-item">
+					<text class="form-label">性别</text>
+					<picker mode="selector" :range="genderOptions" :value="genderIndex" @change="onGenderChange">
+						<view class="picker-view">
+							<text class="picker-text">{{ genderOptions[genderIndex] }}</text>
+							<text class="picker-arrow">▼</text>
+						</view>
+					</picker>
+				</view>
+				
+				<view class="form-item">
+					<text class="form-label">年龄</text>
+					<input class="form-input" type="number" v-model="age" placeholder="请输入年龄" />
+				</view>
+				
+				<view class="form-item">
+					<text class="form-label">年级</text>
+					<input class="form-input" v-model="grade" placeholder="请输入年级" />
+				</view>
+			</view>
+			
+			<view class="confirm-button" @click="handleConfirm">
+				<text class="confirm-button-text">确认</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script lang="uts">
+	type ChildInfo = {
+		id: string
+		nickname: string
+		gender: string
+		age: number
+		grade: string
+		avatar?: string
+	}
+	
+	export default {
+		data() {
+			return {
+				childId: '',
+				avatarUrl: '',
+				nickname: '',
+				gender: '男',
+				genderIndex: 0,
+				genderOptions: ['男', '女'],
+				age: '',
+				grade: ''
+			}
+		},
+		onLoad(options: any) {
+			if (options != null && options.id != null) {
+				this.childId = options.id.toString()
+				this.loadChildInfo()
+			}
+		},
+		methods: {
+			goBack() {
+				uni.navigateBack()
+			},
+			loadChildInfo() {
+				try {
+					const stored = uni.getStorageSync('childrenList')
+					if (stored != null && stored != '') {
+						const parsed = JSON.parse(stored.toString())
+						if (Array.isArray(parsed)) {
+							const childrenList = parsed as ChildInfo[]
+							for (let i = 0; i < childrenList.length; i++) {
+								if (childrenList[i].id === this.childId) {
+									const child = childrenList[i]
+									this.nickname = child.nickname
+									this.gender = child.gender
+									this.age = child.age.toString()
+									this.grade = child.grade
+									this.avatarUrl = child.avatar != null ? child.avatar : ''
+									
+									// 设置性别索引
+									for (let j = 0; j < this.genderOptions.length; j++) {
+										if (this.genderOptions[j] === this.gender) {
+											this.genderIndex = j
+											break
+										}
+									}
+									break
+								}
+							}
+						}
+					}
+				} catch (e) {
+					console.error('加载子女信息失败:', e)
+				}
+			},
+			chooseAvatar() {
+				uni.chooseImage({
+					count: 1,
+					sizeType: ['compressed'],
+					sourceType: ['album', 'camera'],
+					success: (res: any) => {
+						if (res.tempFilePaths != null && res.tempFilePaths.length > 0) {
+							this.avatarUrl = res.tempFilePaths[0].toString()
+						}
+					},
+					fail: (err: any) => {
+						console.error('选择头像失败:', err)
+					}
+				})
+			},
+			onGenderChange(e: any) {
+				const index = e.detail != null && e.detail.value != null ? Number(e.detail.value) : 0
+				this.genderIndex = index
+				this.gender = this.genderOptions[index]
+			},
+			handleDelete() {
+				uni.showModal({
+					title: '提示',
+					content: '确定要删除这个子女吗？',
+					success: (res: any) => {
+						if (res.confirm) {
+							this.deleteChild()
+						}
+					}
+				})
+			},
+			deleteChild() {
+				try {
+					const stored = uni.getStorageSync('childrenList')
+					if (stored != null && stored != '') {
+						const parsed = JSON.parse(stored.toString())
+						if (Array.isArray(parsed)) {
+							let childrenList = parsed as ChildInfo[]
+							// 过滤掉要删除的子女
+							const newList: ChildInfo[] = []
+							for (let i = 0; i < childrenList.length; i++) {
+								if (childrenList[i].id !== this.childId) {
+									newList.push(childrenList[i])
+								}
+							}
+							
+							// 保存更新后的列表
+							uni.setStorageSync('childrenList', JSON.stringify(newList))
+							
+							// 如果删除的是当前选中的子女，需要更新
+							const currentChildId = uni.getStorageSync('currentChildId')
+							if (currentChildId != null && currentChildId.toString() === this.childId) {
+								if (newList.length > 0) {
+									uni.setStorageSync('currentChildId', newList[0].id)
+								} else {
+									uni.removeStorageSync('currentChildId')
+								}
+							}
+							
+							uni.showToast({
+								title: '删除成功',
+								icon: 'success'
+							})
+							
+							setTimeout(() => {
+								uni.navigateBack()
+							}, 1500)
+						}
+					}
+				} catch (e) {
+					console.error('删除子女失败:', e)
+					uni.showToast({
+						title: '删除失败，请重试',
+						icon: 'none'
+					})
+				}
+			},
+			handleConfirm() {
+				const name = this.nickname.trim()
+				const ageStr = this.age.toString().trim()
+				const gradeStr = this.grade.trim()
+				
+				if (name === '') {
+					uni.showToast({
+						title: '请输入小名',
+						icon: 'none'
+					})
+					return
+				}
+				
+				if (ageStr === '' || Number(ageStr) <= 0) {
+					uni.showToast({
+						title: '请输入有效年龄',
+						icon: 'none'
+					})
+					return
+				}
+				
+				if (gradeStr === '') {
+					uni.showToast({
+						title: '请输入年级',
+						icon: 'none'
+					})
+					return
+				}
+				
+				try {
+					const stored = uni.getStorageSync('childrenList')
+					if (stored != null && stored != '') {
+						const parsed = JSON.parse(stored.toString())
+						if (Array.isArray(parsed)) {
+							const childrenList = parsed as ChildInfo[]
+							// 更新子女信息
+							for (let i = 0; i < childrenList.length; i++) {
+								if (childrenList[i].id === this.childId) {
+									childrenList[i].nickname = name
+									childrenList[i].gender = this.gender
+									childrenList[i].age = Number(ageStr)
+									childrenList[i].grade = gradeStr
+									if (this.avatarUrl != '') {
+										childrenList[i].avatar = this.avatarUrl
+									}
+									break
+								}
+							}
+							
+							// 保存更新后的列表
+							uni.setStorageSync('childrenList', JSON.stringify(childrenList))
+							
+							uni.showToast({
+								title: '保存成功',
+								icon: 'success'
+							})
+							
+							setTimeout(() => {
+								uni.navigateBack()
+							}, 1500)
+						}
+					}
+				} catch (e) {
+					console.error('保存子女信息失败:', e)
+					uni.showToast({
+						title: '保存失败，请重试',
+						icon: 'none'
+					})
+				}
+			}
+		}
+	}
+</script>
+
+<style>
+	.container {
+		flex: 1;
+		background-color: #FFB5E8;
+	}
+	
+	.header {
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		padding: 20px;
+		padding-top: 50px;
+		background-color: #F368E0;
+	}
+	
+	.back-button {
+		width: 40px;
+		height: 40px;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.back-icon {
+		font-size: 24px;
+		color: #FFFFFF;
+		font-weight: bold;
+	}
+	
+	.delete-button {
+		width: 40px;
+		height: 40px;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.delete-icon {
+		font-size: 24px;
+	}
+	
+	.content {
+		flex: 1;
+		padding: 30px 20px;
+	}
+	
+	.avatar-section {
+		align-items: center;
+		margin-bottom: 30px;
+	}
+	
+	.avatar-wrapper {
+		width: 120px;
+		height: 120px;
+		border-radius: 60px;
+		background-color: #FFFFFF;
+		border: 4px solid #F368E0;
+		align-items: center;
+		justify-content: center;
+		overflow: hidden;
+	}
+	
+	.avatar {
+		width: 100%;
+		height: 100%;
+	}
+	
+	.avatar-placeholder {
+		font-size: 14px;
+		color: #999999;
+	}
+	
+	.form-section {
+		margin-bottom: 30px;
+	}
+	
+	.form-item {
+		margin-bottom: 20px;
+	}
+	
+	.form-label {
+		font-size: 16px;
+		color: #333333;
+		font-weight: bold;
+		margin-bottom: 8px;
+	}
+	
+	.form-input {
+		width: 100%;
+		height: 44px;
+		background-color: #FFFFFF;
+		border-radius: 10px;
+		padding: 0 12px;
+		font-size: 14px;
+		color: #333333;
+		border: 2px solid #F368E0;
+	}
+	
+	.picker-view {
+		width: 100%;
+		height: 44px;
+		background-color: #FFFFFF;
+		border-radius: 10px;
+		padding: 0 12px;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		border: 2px solid #F368E0;
+	}
+	
+	.picker-text {
+		font-size: 14px;
+		color: #333333;
+	}
+	
+	.picker-arrow {
+		font-size: 12px;
+		color: #999999;
+	}
+	
+	.confirm-button {
+		width: 100%;
+		height: 50px;
+		background-color: #4CAF50;
+		border-radius: 25px;
+		align-items: center;
+		justify-content: center;
+		border: 2px solid #FFFFFF;
+		box-shadow: 0 3px 10px rgba(76, 175, 80, 0.25);
+	}
+	
+	.confirm-button:active {
+		opacity: 0.8;
+	}
+	
+	.confirm-button-text {
+		font-size: 18px;
+		color: #FFFFFF;
+		font-weight: bold;
+	}
+</style>
+

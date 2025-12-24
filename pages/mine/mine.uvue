@@ -1,7 +1,20 @@
 <template>
-	<view class="container">
+	<view class="container" @click="closeAddMenu">
 		<view class="header">
 			<text class="title">👤 我的</text>
+			<!-- 右上角+按钮 -->
+			<view class="header-add-button" v-if="isLoggedIn" @click.stop="toggleAddMenu">
+				<text class="add-icon">+</text>
+			</view>
+			<!-- 下拉菜单 -->
+			<view class="add-menu" v-if="isLoggedIn && showAddMenu" @click.stop>
+				<view class="menu-item" @click="goToAddChild">
+					<text class="menu-item-text">添加子女</text>
+				</view>
+				<view class="menu-item" @click="goToFamilyManagement">
+					<text class="menu-item-text">家庭管理</text>
+				</view>
+			</view>
 		</view>
 		<!-- 头像与登录 -->
 		<view class="profile-section">
@@ -15,6 +28,23 @@
 			<!-- 已登录时显示手机号 -->
 			<view class="phone-number" v-if="isLoggedIn">
 				<text class="phone-number-text">{{ authPhoneNumber }}</text>
+			</view>
+		</view>
+		<!-- 子女卡片 -->
+		<view class="child-card" v-if="isLoggedIn && currentChild != null">
+			<view class="child-card-content">
+				<view class="child-avatar-wrapper">
+					<image class="child-avatar" :src="currentChild.avatar || avatarUrl" mode="aspectFill"></image>
+				</view>
+				<text class="child-name">{{ currentChild.nickname || '孩子昵称' }}</text>
+			</view>
+			<view class="child-card-actions">
+				<view class="child-action-button manage-button" @click="goToChildManagement">
+					<text class="action-button-text">管理</text>
+				</view>
+				<view class="child-action-button switch-button" @click="openChildSelector">
+					<text class="action-button-text">切换</text>
+				</view>
 			</view>
 		</view>
 		<view class="content">
@@ -69,11 +99,52 @@
 				</view>
 			</view>
 		</view>
+		
+		<!-- 子女选择弹窗 -->
+		<view class="dialog-mask" v-if="showChildSelector" @click="closeChildSelector">
+			<view class="child-selector-dialog" @click.stop>
+				<view class="child-selector-title">
+					<text class="selector-title-text">选择子女</text>
+				</view>
+				<view class="child-list">
+					<view 
+						class="child-selector-item" 
+						v-for="(child, index) in childrenList" 
+						:key="index"
+						@click="selectChild(child)"
+					>
+						<view class="child-selector-avatar-wrapper">
+							<image class="child-selector-avatar" :src="child.avatar || avatarUrl" mode="aspectFill"></image>
+						</view>
+						<text class="child-selector-name">{{ child.nickname }}</text>
+						<text class="check-icon" v-if="currentChild != null && currentChild.id === child.id">✓</text>
+					</view>
+				</view>
+				<view class="selector-actions">
+					<view class="selector-button cancel-button" @click="closeChildSelector">
+						<text class="selector-button-text">取消</text>
+					</view>
+					<view class="selector-button confirm-button" @click="confirmChildSelection">
+						<text class="selector-button-text">确定</text>
+					</view>
+				</view>
+			</view>
+		</view>
 	</view>
 </template>
 
 <script lang="uts">
 	import { login } from '../../utils/api.uts'
+	
+	type ChildInfo = {
+		id: string
+		nickname: string
+		gender: string
+		age: number
+		grade: string
+		avatar?: string
+	}
+	
 	export default {
 		data() {
 			return {
@@ -82,7 +153,12 @@
 				phoneNumber: '',
 				password: '',
 				authToken: '',
-				authPhoneNumber: ''
+				authPhoneNumber: '',
+				showAddMenu: false,
+				childrenList: [] as ChildInfo[],
+				currentChild: null as ChildInfo | null,
+				selectedChild: null as ChildInfo | null,
+				showChildSelector: false
 			}
 		},
 		computed: {
@@ -92,6 +168,13 @@
 		},
 		onLoad() {
 			this.loadAuthInfo()
+			this.loadChildrenList()
+			this.loadCurrentChild()
+		},
+		onShow() {
+			// 页面显示时重新加载数据
+			this.loadChildrenList()
+			this.loadCurrentChild()
 		},
 		methods: {
 			openAuthDialog() {
@@ -214,6 +297,115 @@
 						break
 					default:
 						break
+				}
+			},
+			toggleAddMenu() {
+				this.showAddMenu = !this.showAddMenu
+			},
+			closeAddMenu() {
+				this.showAddMenu = false
+			},
+			goToAddChild() {
+				this.showAddMenu = false
+				uni.navigateTo({
+					url: '/pages/mine/add-child'
+				})
+			},
+			goToFamilyManagement() {
+				this.showAddMenu = false
+				uni.navigateTo({
+					url: '/pages/mine/parent-management'
+				})
+			},
+			goToChildManagement() {
+				uni.navigateTo({
+					url: '/pages/mine/child-management'
+				})
+			},
+			openChildSelector() {
+				if (this.childrenList.length === 0) {
+					uni.showToast({
+						title: '暂无子女，请先添加',
+						icon: 'none'
+					})
+					return
+				}
+				this.selectedChild = this.currentChild
+				this.showChildSelector = true
+			},
+			closeChildSelector() {
+				this.showChildSelector = false
+				this.selectedChild = null
+			},
+			selectChild(child: ChildInfo) {
+				this.selectedChild = child
+			},
+			confirmChildSelection() {
+				if (this.selectedChild != null) {
+					this.currentChild = this.selectedChild
+					this.saveCurrentChild()
+					uni.showToast({
+						title: '切换成功',
+						icon: 'success'
+					})
+				}
+				this.closeChildSelector()
+			},
+			loadChildrenList() {
+				try {
+					const stored = uni.getStorageSync('childrenList')
+					if (stored != null && stored != '') {
+						const parsed = JSON.parse(stored.toString())
+						if (Array.isArray(parsed)) {
+							this.childrenList = parsed as ChildInfo[]
+						}
+					}
+				} catch (e) {
+					console.error('加载子女列表失败:', e)
+					this.childrenList = []
+				}
+			},
+			saveChildrenList() {
+				try {
+					uni.setStorageSync('childrenList', JSON.stringify(this.childrenList))
+				} catch (e) {
+					console.error('保存子女列表失败:', e)
+				}
+			},
+			loadCurrentChild() {
+				try {
+					const stored = uni.getStorageSync('currentChildId')
+					if (stored != null && stored != '') {
+						const childId = stored.toString()
+						for (let i = 0; i < this.childrenList.length; i++) {
+							if (this.childrenList[i].id === childId) {
+								this.currentChild = this.childrenList[i]
+								break
+							}
+						}
+						// 如果找不到，使用第一个
+						if (this.currentChild == null && this.childrenList.length > 0) {
+							this.currentChild = this.childrenList[0]
+							this.saveCurrentChild()
+						}
+					} else if (this.childrenList.length > 0) {
+						// 如果没有保存的，使用第一个
+						this.currentChild = this.childrenList[0]
+						this.saveCurrentChild()
+					}
+				} catch (e) {
+					console.error('加载当前子女失败:', e)
+				}
+			},
+			saveCurrentChild() {
+				try {
+					if (this.currentChild != null) {
+						uni.setStorageSync('currentChildId', this.currentChild.id)
+					} else {
+						uni.removeStorageSync('currentChildId')
+					}
+				} catch (e) {
+					console.error('保存当前子女失败:', e)
 				}
 			}
 		}
@@ -453,5 +645,247 @@
 		font-size: 16px;
 		color: #FFFFFF;
 		font-weight: bold;
+	}
+	
+	/* 右上角+按钮样式 */
+	.header {
+		position: relative;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+	}
+	
+	.header-add-button {
+		position: absolute;
+		right: 0;
+		width: 40px;
+		height: 40px;
+		background-color: #F368E0;
+		border-radius: 20px;
+		align-items: center;
+		justify-content: center;
+		border: 2px solid #FFFFFF;
+		z-index: 1001;
+	}
+	
+	.header-add-button:active {
+		opacity: 0.8;
+	}
+	
+	.add-icon {
+		font-size: 28px;
+		color: #FFFFFF;
+		font-weight: bold;
+		line-height: 28px;
+	}
+	
+	/* 下拉菜单样式 */
+	.add-menu {
+		position: fixed;
+		top: 90px;
+		right: 20px;
+		width: 140px;
+		background-color: #FFFFFF;
+		border-radius: 10px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+		overflow: hidden;
+		z-index: 1002;
+	}
+	
+	.menu-item {
+		padding: 12px 16px;
+		border-bottom-width: 1px;
+		border-bottom-color: #F0F0F0;
+		border-bottom-style: solid;
+	}
+	
+	.menu-item:last-child {
+		border-bottom-width: 0;
+	}
+	
+	.menu-item:active {
+		background-color: #F5F5F5;
+	}
+	
+	.menu-item-text {
+		font-size: 14px;
+		color: #333333;
+	}
+	
+	/* 子女卡片样式 */
+	.child-card {
+		width: 100%;
+		background-color: #FFFFFF;
+		border-radius: 15px;
+		padding: 16px;
+		margin-bottom: 20px;
+		border: 3px solid #FFFFFF;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	}
+	
+	.child-card-content {
+		flex-direction: row;
+		align-items: center;
+		margin-bottom: 12px;
+	}
+	
+	.child-avatar-wrapper {
+		width: 60px;
+		height: 60px;
+		border-radius: 30px;
+		overflow: hidden;
+		border: 2px solid #F368E0;
+		margin-right: 12px;
+		background-color: #F5F5F5;
+	}
+	
+	.child-avatar {
+		width: 100%;
+		height: 100%;
+	}
+	
+	.child-name {
+		font-size: 18px;
+		font-weight: bold;
+		color: #F368E0;
+		flex: 1;
+	}
+	
+	.child-card-actions {
+		flex-direction: row;
+		justify-content: space-between;
+	}
+	
+	.child-action-button {
+		flex: 1;
+		padding: 10px 0;
+		border-radius: 10px;
+		align-items: center;
+		justify-content: center;
+		margin: 0 5px;
+	}
+	
+	.manage-button {
+		background-color: #F368E0;
+	}
+	
+	.switch-button {
+		background-color: #4CAF50;
+	}
+	
+	.child-action-button:active {
+		opacity: 0.8;
+	}
+	
+	.action-button-text {
+		font-size: 14px;
+		color: #FFFFFF;
+		font-weight: bold;
+	}
+	
+	/* 子女选择弹窗样式 */
+	.child-selector-dialog {
+		width: 90%;
+		max-width: 400px;
+		background-color: #FFFFFF;
+		border-radius: 16px;
+		overflow: hidden;
+	}
+	
+	.child-selector-title {
+		padding: 16px;
+		border-bottom-width: 1px;
+		border-bottom-color: #F0F0F0;
+		border-bottom-style: solid;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.selector-title-text {
+		font-size: 18px;
+		font-weight: bold;
+		color: #333333;
+	}
+	
+	.child-list {
+		max-height: 400px;
+		padding: 12px;
+	}
+	
+	.child-selector-item {
+		flex-direction: row;
+		align-items: center;
+		padding: 12px;
+		border-radius: 10px;
+		margin-bottom: 8px;
+		background-color: #F9F9F9;
+	}
+	
+	.child-selector-item:active {
+		background-color: #F0F0F0;
+	}
+	
+	.child-selector-avatar-wrapper {
+		width: 50px;
+		height: 50px;
+		border-radius: 25px;
+		overflow: hidden;
+		border: 2px solid #4CAF50;
+		margin-right: 12px;
+		background-color: #F5F5F5;
+	}
+	
+	.child-selector-avatar {
+		width: 100%;
+		height: 100%;
+	}
+	
+	.child-selector-name {
+		font-size: 16px;
+		color: #333333;
+		flex: 1;
+	}
+	
+	.check-icon {
+		font-size: 20px;
+		color: #4CAF50;
+		font-weight: bold;
+		margin-left: 8px;
+	}
+	
+	.selector-actions {
+		flex-direction: row;
+		border-top-width: 1px;
+		border-top-color: #F0F0F0;
+		border-top-style: solid;
+	}
+	
+	.selector-button {
+		flex: 1;
+		padding: 14px 0;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.cancel-button {
+		background-color: #F5F5F5;
+		border-right-width: 1px;
+		border-right-color: #F0F0F0;
+		border-right-style: solid;
+	}
+	
+	.selector-button:active {
+		opacity: 0.8;
+	}
+	
+	.selector-button-text {
+		font-size: 16px;
+		color: #333333;
+		font-weight: bold;
+	}
+	
+	.confirm-button .selector-button-text {
+		color: #4CAF50;
 	}
 </style>
