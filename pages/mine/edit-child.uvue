@@ -20,7 +20,7 @@
 			<view class="form-section">
 				<view class="form-item">
 					<text class="form-label">小名</text>
-					<input class="form-input" v-model="nickname" placeholder="请输入小名" />
+					<input class="form-input" v-model="child_name" placeholder="请输入小名" />
 				</view>
 				
 				<view class="form-item">
@@ -52,10 +52,14 @@
 </template>
 
 <script lang="uts">
+	import { updateChild, deleteChild, getChildrenList } from '../../utils/api.uts'
+	/**
+	 * 服务器子女信息类型定义
+	 */
 	type ChildInfo = {
-		id: string
-		nickname: string
-		gender: string
+		id?: string
+		child_name: string
+		gender:string
 		age: number
 		grade: string
 		avatar?: string
@@ -66,7 +70,7 @@
 			return {
 				childId: '',
 				avatarUrl: '',
-				nickname: '',
+				child_name: '',
 				gender: '男',
 				genderIndex: 0,
 				genderOptions: ['男', '女'],
@@ -92,21 +96,16 @@
 						if (Array.isArray(parsed)) {
 							const childrenList = parsed as ChildInfo[]
 							for (let i = 0; i < childrenList.length; i++) {
-								if (childrenList[i].id === this.childId) {
+								if (childrenList[i].id?.toString() === this.childId) {
 									const child = childrenList[i]
-									this.nickname = child.nickname
+									this.child_name = child.child_name
 									this.gender = child.gender
 									this.age = child.age.toString()
-									this.grade = child.grade
+									this.grade = child.grade_name
 									this.avatarUrl = child.avatar != null ? child.avatar : ''
 									
 									// 设置性别索引
-									for (let j = 0; j < this.genderOptions.length; j++) {
-										if (this.genderOptions[j] === this.gender) {
-											this.genderIndex = j
-											break
-										}
-									}
+									this.genderIndex = child.gender
 									break
 								}
 							}
@@ -148,56 +147,74 @@
 				})
 			},
 			deleteChild() {
-				try {
-					const stored = uni.getStorageSync('childrenList')
-					if (stored != null && stored != '') {
-						const parsed = JSON.parse(stored.toString())
-						if (Array.isArray(parsed)) {
-							let childrenList = parsed as ChildInfo[]
-							// 过滤掉要删除的子女
-							const newList: ChildInfo[] = []
-							for (let i = 0; i < childrenList.length; i++) {
-								if (childrenList[i].id !== this.childId) {
-									newList.push(childrenList[i])
+				// 显示加载提示
+				uni.showLoading({
+					title: '删除中...',
+					mask: true
+				})
+				
+				// 调用API删除子女
+				deleteChild(this.childId, (result: any) => {
+					uni.hideLoading()
+					
+					if (result.success) {
+						// 删除成功，更新本地存储
+						try {
+							const stored = uni.getStorageSync('childrenList')
+							if (stored != null && stored != '') {
+								const parsed = JSON.parse(stored.toString())
+								if (Array.isArray(parsed)) {
+									let childrenList = parsed as ChildInfo[]
+									// 过滤掉要删除的子女
+									const newList: ChildInfo[] = []
+									for (let i = 0; i < childrenList.length; i++) {
+										if (childrenList[i].id != null && childrenList[i].id !== this.childId) {
+											newList.push(childrenList[i])
+										}
+									}
+									
+									// 保存更新后的列表
+									uni.setStorageSync('childrenList', JSON.stringify(newList))
+									
+									// 如果删除的是当前选中的子女，需要更新
+									const currentChildId = uni.getStorageSync('currentChildId')
+									if (currentChildId != null && currentChildId.toString() === this.childId) {
+										if (newList.length > 0 && newList[0].id != null) {
+											uni.setStorageSync('currentChildId', newList[0].id)
+										} else {
+											uni.removeStorageSync('currentChildId')
+										}
+									}
 								}
 							}
-							
-							// 保存更新后的列表
-							uni.setStorageSync('childrenList', JSON.stringify(newList))
-							
-							// 如果删除的是当前选中的子女，需要更新
-							const currentChildId = uni.getStorageSync('currentChildId')
-							if (currentChildId != null && currentChildId.toString() === this.childId) {
-								if (newList.length > 0) {
-									uni.setStorageSync('currentChildId', newList[0].id)
-								} else {
-									uni.removeStorageSync('currentChildId')
-								}
-							}
-							
-							uni.showToast({
-								title: '删除成功',
-								icon: 'success'
-							})
-							
-							setTimeout(() => {
-								uni.navigateBack()
-							}, 1500)
+						} catch (e) {
+							console.error('更新本地存储失败:', e)
 						}
+						
+						uni.showToast({
+							title: result.message || '删除成功',
+							icon: 'success'
+						})
+						
+						setTimeout(() => {
+							uni.navigateBack()
+						}, 1500)
+					} else {
+						// 删除失败
+						uni.showToast({
+							title: result.message || '删除失败，请重试',
+							icon: 'none',
+							duration: 2000
+						})
 					}
-				} catch (e) {
-					console.error('删除子女失败:', e)
-					uni.showToast({
-						title: '删除失败，请重试',
-						icon: 'none'
-					})
-				}
+				})
 			},
 			handleConfirm() {
-				const name = this.nickname.trim()
+				const name = this.child_name.trim()
 				const ageStr = this.age.toString().trim()
 				const gradeStr = this.grade.trim()
 				
+				// 表单验证
 				if (name === '') {
 					uni.showToast({
 						title: '请输入小名',
@@ -222,46 +239,72 @@
 					return
 				}
 				
-				try {
-					const stored = uni.getStorageSync('childrenList')
-					if (stored != null && stored != '') {
-						const parsed = JSON.parse(stored.toString())
-						if (Array.isArray(parsed)) {
-							const childrenList = parsed as ChildInfo[]
-							// 更新子女信息
-							for (let i = 0; i < childrenList.length; i++) {
-								if (childrenList[i].id === this.childId) {
-									childrenList[i].nickname = name
-									childrenList[i].gender = this.gender
-									childrenList[i].age = Number(ageStr)
-									childrenList[i].grade = gradeStr
-									if (this.avatarUrl != '') {
-										childrenList[i].avatar = this.avatarUrl
+				// 构建更新后的子女信息对象
+				const updatedChild: ChildInfo = {
+					child_name: name,
+					gender: this.gender,	
+					age: Number(ageStr),
+					grade: gradeStr,
+					avatar: this.avatarUrl != '' ? this.avatarUrl : undefined
+				}
+				
+				// 显示加载提示
+				uni.showLoading({
+					title: '保存中...',
+					mask: true
+				})
+				
+				// 调用API更新子女信息
+				updateChild(this.childId, updatedChild, (result: any) => {
+					uni.hideLoading()
+					
+					if (result.success) {
+						// 更新成功，同步更新本地存储
+						try {
+							const stored = uni.getStorageSync('childrenList')
+							if (stored != null && stored != '') {
+								const parsed = JSON.parse(stored.toString())
+								if (Array.isArray(parsed)) {
+									const childrenList = parsed as ChildInfo[]
+									// 更新子女信息
+									for (let i = 0; i < childrenList.length; i++) {
+										if (childrenList[i].id != null && childrenList[i].id?.toString() === this.childId) {
+											childrenList[i].child_name = name
+											childrenList[i].gender = this.gender
+											childrenList[i].age = Number(ageStr)
+											childrenList[i].grade = gradeStr
+											if (this.avatarUrl != '') {
+												childrenList[i].avatar = this.avatarUrl
+											}
+											break
+										}
 									}
-									break
+									
+									// 保存更新后的列表
+									uni.setStorageSync('childrenList', JSON.stringify(childrenList))
 								}
 							}
-							
-							// 保存更新后的列表
-							uni.setStorageSync('childrenList', JSON.stringify(childrenList))
-							
-							uni.showToast({
-								title: '保存成功',
-								icon: 'success'
-							})
-							
-							setTimeout(() => {
-								uni.navigateBack()
-							}, 1500)
+						} catch (e) {
+							console.error('更新本地存储失败:', e)
 						}
+						
+						uni.showToast({
+							title: result.message || '保存成功',
+							icon: 'success'
+						})
+						
+						setTimeout(() => {
+							uni.navigateBack()
+						}, 1500)
+					} else {
+						// 更新失败
+						uni.showToast({
+							title: result.message || '保存失败，请重试',
+							icon: 'none',
+							duration: 2000
+						})
 					}
-				} catch (e) {
-					console.error('保存子女信息失败:', e)
-					uni.showToast({
-						title: '保存失败，请重试',
-						icon: 'none'
-					})
-				}
+				})
 			}
 		}
 	}

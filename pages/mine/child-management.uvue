@@ -18,7 +18,7 @@
 						<view class="child-avatar-wrapper">
 							<image class="child-avatar" :src="child.avatar || defaultAvatar" mode="aspectFill"></image>
 						</view>
-						<text class="child-item-name">{{ child.nickname }}</text>
+						<text class="child-item-name">{{ child.child_name }}</text>
 					</view>
 					<view class="edit-button" @click="editChild(child)">
 						<text class="edit-button-text">编辑</text>
@@ -34,8 +34,10 @@
 </template>
 
 <script lang="uts">
+	import { getChildrenList } from '../../utils/api.uts'
+	
 	type ChildInfo = {
-		id: string
+		id?: string
 		nickname: string
 		gender: string
 		age: number
@@ -61,18 +63,48 @@
 				uni.navigateBack()
 			},
 			loadChildrenList() {
-				try {
-					const stored = uni.getStorageSync('childrenList')
-					if (stored != null && stored != '') {
-						const parsed = JSON.parse(stored.toString())
-						if (Array.isArray(parsed)) {
-							this.childrenList = parsed as ChildInfo[]
+				// 调用API获取子女列表
+				getChildrenList((result: any) => {
+					if (result.success) {
+						// API调用成功，使用服务器返回的数据
+						this.childrenList = result.data
+						
+						// 同时更新本地存储作为缓存
+						try {
+							uni.setStorageSync('childrenList', JSON.stringify(result.data))
+						} catch (e) {
+							console.error('保存子女列表到本地存储失败:', e)
+						}
+					} else {
+						// API调用失败，尝试从本地存储加载（离线支持）
+						console.error('获取子女列表失败:', result.message)
+						try {
+							const stored = uni.getStorageSync('childrenList')
+							if (stored != null && stored != '') {
+								const parsed = JSON.parse(stored.toString())
+								if (Array.isArray(parsed)) {
+									this.childrenList = parsed as ChildInfo[]
+								} else {
+									this.childrenList = []
+								}
+							} else {
+								this.childrenList = []
+							}
+						} catch (e) {
+							console.error('从本地存储加载子女列表失败:', e)
+							this.childrenList = []
+						}
+						
+						// 显示错误提示（如果不是网络错误，可能是未登录等）
+						if (result.message.indexOf('未授权') >= 0 || result.message.indexOf('登录') >= 0) {
+							uni.showToast({
+								title: result.message,
+								icon: 'none',
+								duration: 2000
+							})
 						}
 					}
-				} catch (e) {
-					console.error('加载子女列表失败:', e)
-					this.childrenList = []
-				}
+				})
 			},
 			editChild(child: ChildInfo) {
 				uni.navigateTo({
@@ -80,6 +112,7 @@
 				})
 			},
 			goToAddChild() {
+				// 检查是否超过5个子女的限制
 				if (this.childrenList.length >= 5) {
 					uni.showToast({
 						title: '最多只能添加5个子女',
@@ -87,6 +120,7 @@
 					})
 					return
 				}
+				// 跳转到添加子女页面
 				uni.navigateTo({
 					url: '/pages/mine/add-child'
 				})

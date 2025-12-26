@@ -131,3 +131,396 @@ export function login(phoneNumber: string, password: string, callback: (result: 
 	})
 }
 
+// ==================== 子女管理相关API ====================
+
+/**
+ * 服务器子女信息类型定义
+ */
+type ChildInfo = {
+	id?: string
+	child_name: string
+	gender: string
+	age: number
+	grade: string
+	avatar?: string
+}
+
+/**
+ * API响应基础类型
+ */
+type ApiResponse<T = any> = {
+	code?: number
+	msg?: string
+	message?: string
+	data?: T
+}
+
+/**
+ * 获取认证Token
+ * @returns {string} 返回存储的token，如果不存在则返回空字符串
+ */
+function getAuthToken(): string {
+	try {
+		const token = uni.getStorageSync('authToken')
+		return token != null && token != '' ? token.toString() : ''
+	} catch (e) {
+		console.error('获取token失败:', e)
+		return ''
+	}
+}
+
+/**
+ * 获取子女列表
+ * @param {Function} callback 回调函数，参数为结果对象 {success: boolean, data: ChildInfo[], message: string}
+ * @description 调用 GET /children 接口获取当前用户的所有子女信息
+ */
+export function getChildrenList(callback: (result: { success: boolean, data: ChildInfo[], message: string }) => void) {
+	const requestUrl = `${BASE_URL}/children`
+	const token = getAuthToken()
+	
+	uni.request({
+		url: requestUrl,
+		method: 'GET',
+		timeout: 10000,
+		header: {
+			'Content-Type': 'application/json',
+			'Authorization': token != '' ? `Bearer ${token}` : ''
+		},
+		success: (res: any) => {
+			let ok = false
+			let childrenList: ChildInfo[] = []
+			let msg = '获取成功'
+			
+			if (res != null && res.statusCode === 200) {
+				const data: ApiResponse<ChildInfo[]> = res.data as ApiResponse<ChildInfo[]>
+				if (data != null) {
+					// 检查code字段，通常0或200表示成功
+					if (data.code != null) {
+						if (data.code === 0 || data.code === 200) {
+							ok = true
+							if (data.data != null && Array.isArray(data.data)) {
+								childrenList = data.data as ChildInfo[]
+							}
+							if (data.msg != null) {
+								msg = data.msg.toString()
+							} else if (data.message != null) {
+								msg = data.message.toString()
+							}
+						} else {
+							// 失败响应
+							if (data.msg != null) {
+								msg = data.msg.toString()
+							} else if (data.message != null) {
+								msg = data.message.toString()
+							} else {
+								msg = `获取失败，错误码: ${data.code}`
+							}
+						}
+					} else {
+						// 没有code字段，直接使用data
+						ok = true
+						if (data.data != null && Array.isArray(data.data)) {
+							childrenList = data.data as ChildInfo[]
+						}
+					}
+				} else {
+					msg = '响应数据为空'
+				}
+			} else if (res != null && res.statusCode === 401) {
+				msg = '未授权，请重新登录'
+			} else if (res != null && res.statusCode != null) {
+				msg = `请求失败，状态码 ${res.statusCode}`
+				console.error('getChildrenList failed, statusCode:', res.statusCode)
+			} else {
+				msg = '请求失败，请检查网络连接'
+				console.error('getChildrenList failed, invalid response')
+			}
+			
+			callback({
+				success: ok,
+				data: childrenList,
+				message: msg
+			})
+		},
+		fail: (err: any) => {
+			console.error('getChildrenList request fail:', err)
+			callback({
+				success: false,
+				data: [],
+				message: '网络异常，请稍后重试'
+			})
+		}
+	})
+}
+
+/**
+ * 添加子女
+ * @param {ChildInfo} childInfo 子女信息对象（不需要包含id字段，由服务器生成）
+ * @param {Function} callback 回调函数，参数为结果对象 {success: boolean, data: ChildInfo | null, message: string}
+ * @description 调用 POST /children 接口添加新的子女信息
+ */
+export function addChild(childInfo: ChildInfo, callback: (result: { success: boolean, data: ChildInfo | null, message: string }) => void) {
+	const requestUrl = `${BASE_URL}/children`
+	const token = getAuthToken()
+	
+	uni.request({
+		url: requestUrl,
+		method: 'POST',
+		timeout: 10000,
+		header: {
+			'Content-Type': 'application/json',
+			'Authorization': token != '' ? `Bearer ${token}` : ''
+		},
+		data: {
+			child_name: childInfo.child_name,
+			gender: childInfo.gender,
+			age: childInfo.age,
+			grade: childInfo.grade,
+			avatar: childInfo.avatar
+		},
+		success: (res: any) => {
+			let ok = false
+			let childData: ChildInfo | null = null
+			let msg = '添加成功'
+			
+			if (res != null && (res.statusCode === 200 || res.statusCode === 201)) {
+				const data: ApiResponse<ChildInfo> = res.data as ApiResponse<ChildInfo>
+				if (data != null) {
+					// 检查code字段
+					if (data.code != null) {
+						if (data.code === 0 || data.code === 200 || data.code === 201) {
+							ok = true
+							if (data.data != null) {
+								childData = data.data as ChildInfo
+							}
+							if (data.msg != null) {
+								msg = data.msg.toString()
+							} else if (data.message != null) {
+								msg = data.message.toString()
+							}
+						} else {
+							// 失败响应
+							if (data.msg != null) {
+								msg = data.msg.toString()
+							} else if (data.message != null) {
+								msg = data.message.toString()
+							} else {
+								msg = `添加失败，错误码: ${data.code}`
+							}
+						}
+					} else {
+						// 没有code字段，直接使用data
+						ok = true
+						if (data.data != null) {
+							childData = data.data as ChildInfo
+						}
+					}
+				} else {
+					msg = '响应数据为空'
+				}
+			} else if (res != null && res.statusCode === 401) {
+				msg = '未授权，请重新登录'
+			} else if (res != null && res.statusCode != null) {
+				msg = `请求失败，状态码 ${res.statusCode} ${res.data.message}`
+				console.error('addChild failed, statusCode:', res.statusCode)
+			} else {
+				msg = '请求失败，请检查网络连接'
+				console.error('addChild failed, invalid response')
+			}
+			
+			callback({
+				success: ok,
+				data: childData,
+				message: msg
+			})
+		},
+		fail: (err: any) => {
+			console.error('addChild request fail:', err)
+			callback({
+				success: false,
+				data: null,
+				message: '网络异常，请稍后重试'
+			})
+		}
+	})
+}
+
+/**
+ * 更新子女信息
+ * @param {string} childId 子女ID
+ * @param {ChildInfo} childInfo 更新后的子女信息对象
+ * @param {Function} callback 回调函数，参数为结果对象 {success: boolean, data: ChildInfo | null, message: string}
+ * @description 调用 PUT /children/:id 接口更新指定子女的信息
+ */
+export function updateChild(childId: string, childInfo: ChildInfo, callback: (result: { success: boolean, data: ChildInfo | null, message: string }) => void) {
+	const requestUrl = `${BASE_URL}/children/${childId}`
+	const token = getAuthToken()
+	
+	uni.request({
+		url: requestUrl,
+		method: 'PUT',
+		timeout: 10000,
+		header: {
+			'Content-Type': 'application/json',
+			'Authorization': token != '' ? `Bearer ${token}` : ''
+		},
+		data: {
+			nickname: childInfo.nickname,
+			gender: childInfo.gender,
+			age: childInfo.age,
+			grade: childInfo.grade,
+			avatar: childInfo.avatar
+		},
+		success: (res: any) => {
+			let ok = false
+			let childData: ChildInfo | null = null
+			let msg = '更新成功'
+			
+			if (res != null && res.statusCode === 200) {
+				const data: ApiResponse<ChildInfo> = res.data as ApiResponse<ChildInfo>
+				if (data != null) {
+					// 检查code字段
+					if (data.code != null) {
+						if (data.code === 0 || data.code === 200) {
+							ok = true
+							if (data.data != null) {
+								childData = data.data as ChildInfo
+							}
+							if (data.msg != null) {
+								msg = data.msg.toString()
+							} else if (data.message != null) {
+								msg = data.message.toString()
+							}
+						} else {
+							// 失败响应
+							if (data.msg != null) {
+								msg = data.msg.toString()
+							} else if (data.message != null) {
+								msg = data.message.toString()
+							} else {
+								msg = `更新失败，错误码: ${data.code}`
+							}
+						}
+					} else {
+						// 没有code字段，直接使用data
+						ok = true
+						if (data.data != null) {
+							childData = data.data as ChildInfo
+						}
+					}
+				} else {
+					msg = '响应数据为空'
+				}
+			} else if (res != null && res.statusCode === 401) {
+				msg = '未授权，请重新登录'
+			} else if (res != null && res.statusCode === 404) {
+				msg = '子女信息不存在'
+			} else if (res != null && res.statusCode != null) {
+				msg = `请求失败，状态码 ${res.statusCode}`
+				console.error('updateChild failed, statusCode:', res.statusCode)
+			} else {
+				msg = '请求失败，请检查网络连接'
+				console.error('updateChild failed, invalid response')
+			}
+			
+			callback({
+				success: ok,
+				data: childData,
+				message: msg
+			})
+		},
+		fail: (err: any) => {
+			console.error('updateChild request fail:', err)
+			callback({
+				success: false,
+				data: null,
+				message: '网络异常，请稍后重试'
+			})
+		}
+	})
+}
+
+/**
+ * 删除子女
+ * @param {string} childId 子女ID
+ * @param {Function} callback 回调函数，参数为结果对象 {success: boolean, message: string}
+ * @description 调用 DELETE /children/:id 接口删除指定的子女信息
+ */
+export function deleteChild(childId: string, callback: (result: { success: boolean, message: string }) => void) {
+	const requestUrl = `${BASE_URL}/children/${childId}`
+	const token = getAuthToken()
+	
+	uni.request({
+		url: requestUrl,
+		method: 'DELETE',
+		timeout: 10000,
+		header: {
+			'Content-Type': 'application/json',
+			'Authorization': token != '' ? `Bearer ${token}` : ''
+		},
+		success: (res: any) => {
+			let ok = false
+			let msg = '删除成功'
+			
+			if (res != null && (res.statusCode === 200 || res.statusCode === 204)) {
+				const data: ApiResponse = res.data as ApiResponse
+				if (data != null) {
+					// 检查code字段
+					if (data.code != null) {
+						if (data.code === 0 || data.code === 200 || data.code === 204) {
+							ok = true
+							if (data.msg != null) {
+								msg = data.msg.toString()
+							} else if (data.message != null) {
+								msg = data.message.toString()
+							}
+						} else {
+							// 失败响应
+							if (data.msg != null) {
+								msg = data.msg.toString()
+							} else if (data.message != null) {
+								msg = data.message.toString()
+							} else {
+								msg = `删除失败，错误码: ${data.code}`
+							}
+						}
+					} else {
+						// 没有code字段，认为成功
+						ok = true
+						if (data.msg != null) {
+							msg = data.msg.toString()
+						} else if (data.message != null) {
+							msg = data.message.toString()
+						}
+					}
+				} else {
+					// 204 No Content 通常没有响应体
+					ok = true
+				}
+			} else if (res != null && res.statusCode === 401) {
+				msg = '未授权，请重新登录'
+			} else if (res != null && res.statusCode === 404) {
+				msg = '子女信息不存在'
+			} else if (res != null && res.statusCode != null) {
+				msg = `请求失败，状态码 ${res.statusCode}`
+				console.error('deleteChild failed, statusCode:', res.statusCode)
+			} else {
+				msg = '请求失败，请检查网络连接'
+				console.error('deleteChild failed, invalid response')
+			}
+			
+			callback({
+				success: ok,
+				message: msg
+			})
+		},
+		fail: (err: any) => {
+			console.error('deleteChild request fail:', err)
+			callback({
+				success: false,
+				message: '网络异常，请稍后重试'
+			})
+		}
+	})
+}
+

@@ -50,9 +50,12 @@
 </template>
 
 <script lang="uts">
+	import { addChild } from '../../utils/api.uts'
+	
+	//给服务器的数据结构
 	type ChildInfo = {
-		id: string
-		nickname: string
+		id?: string
+		child_name: string
 		gender: string
 		age: number
 		grade: string
@@ -99,7 +102,9 @@
 				const name = this.nickname.trim()
 				const ageStr = this.age.toString().trim()
 				const gradeStr = this.grade.trim()
+				const genderStr = this.gender.trim()
 				
+				// 表单验证
 				if (name === '') {
 					uni.showToast({
 						title: '请输入小名',
@@ -124,68 +129,68 @@
 					return
 				}
 				
-				// 生成唯一ID
-				const childId = 'child_' + Date.now().toString() + '_' + Math.random().toString(36).substring(2, 9)
 				
+				// 构建子女信息对象（不包含id，由服务器生成）
 				const newChild: ChildInfo = {
-					id: childId,
-					nickname: name,
-					gender: this.gender,
+					child_name: name,
+					gender: genderStr,
 					age: Number(ageStr),
 					grade: gradeStr,
 					avatar: this.avatarUrl != '' ? this.avatarUrl : undefined
 				}
 				
-				// 加载现有子女列表
-				let childrenList: ChildInfo[] = []
-				try {
-					const stored = uni.getStorageSync('childrenList')
-					if (stored != null && stored != '') {
-						const parsed = JSON.parse(stored.toString())
-						if (Array.isArray(parsed)) {
-							childrenList = parsed as ChildInfo[]
+				// 显示加载提示
+				uni.showLoading({
+					title: '添加中...',
+					mask: true
+				})
+				
+				// 调用API添加子女
+				addChild(newChild, (result: any) => {
+					uni.hideLoading()
+					
+					if (result.success) {
+						// 添加成功
+						uni.showToast({
+							title: result.message || '添加成功',
+							icon: 'success'
+						})
+						
+						// 如果返回了子女数据且是第一个，设置为当前子女
+						if (result.data != null && result.data.id != null) {
+							try {
+								// 检查是否已有子女列表
+								const stored = uni.getStorageSync('childrenList')
+								let childrenList: ChildInfo[] = []
+								if (stored != null && stored != '') {
+									const parsed = JSON.parse(stored.toString())
+									if (Array.isArray(parsed)) {
+										childrenList = parsed as ChildInfo[]
+									}
+								}
+								
+								// 如果是第一个子女，设置为当前子女
+								if (childrenList.length === 0) {
+									uni.setStorageSync('currentChildId', result.data.id)
+								}
+							} catch (e) {
+								console.error('设置当前子女失败:', e)
+							}
 						}
+						
+						// 延迟返回，让用户看到成功提示
+						setTimeout(() => {
+							uni.navigateBack()
+						}, 1500)
+					} else {
+						// 添加失败
+						uni.showToast({
+							title: result.message || '添加失败，请重试',
+							icon: 'none',
+							duration: 2000
+						})
 					}
-				} catch (e) {
-					console.error('加载子女列表失败:', e)
-				}
-				
-				// 检查是否超过5个
-				if (childrenList.length >= 5) {
-					uni.showToast({
-						title: '最多只能添加5个子女',
-						icon: 'none'
-					})
-					return
-				}
-				
-				// 添加新子女
-				childrenList.push(newChild)
-				
-				// 保存到本地存储
-				try {
-					uni.setStorageSync('childrenList', JSON.stringify(childrenList))
-					
-					// 如果是第一个子女，设置为当前子女
-					if (childrenList.length === 1) {
-						uni.setStorageSync('currentChildId', newChild.id)
-					}
-					
-					uni.showToast({
-						title: '添加成功',
-						icon: 'success'
-					})
-					
-					setTimeout(() => {
-						uni.navigateBack()
-					}, 1500)
-				} catch (e) {
-					console.error('保存子女信息失败:', e)
-					uni.showToast({
-						title: '保存失败，请重试',
-						icon: 'none'
-					})
-				}
+				})
 			}
 		}
 	}

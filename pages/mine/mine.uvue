@@ -36,7 +36,7 @@
 				<view class="child-avatar-wrapper">
 					<image class="child-avatar" :src="currentChild.avatar || avatarUrl" mode="aspectFill"></image>
 				</view>
-				<text class="child-name">{{ currentChild.nickname || '孩子昵称' }}</text>
+				<text class="child-name">{{ currentChild.child_name || '孩子昵称' }}</text>
 			</view>
 			<view class="child-card-actions">
 				<view class="child-action-button manage-button" @click="goToChildManagement">
@@ -116,8 +116,8 @@
 						<view class="child-selector-avatar-wrapper">
 							<image class="child-selector-avatar" :src="child.avatar || avatarUrl" mode="aspectFill"></image>
 						</view>
-						<text class="child-selector-name">{{ child.nickname }}</text>
-						<text class="check-icon" v-if="currentChild != null && currentChild.id === child.id">✓</text>
+						<text class="child-selector-name">{{ child.child_name }}</text>
+						<text class="check-icon" v-if="currentChild != null && currentChild.id != null && child.id != null && currentChild.id === child.id">✓</text>
 					</view>
 				</view>
 				<view class="selector-actions">
@@ -134,10 +134,10 @@
 </template>
 
 <script lang="uts">
-	import { login } from '../../utils/api.uts'
+	import { login, getChildrenList } from '../../utils/api.uts'
 	
 	type ChildInfo = {
-		id: string
+		id?: string
 		nickname: string
 		gender: string
 		age: number
@@ -352,18 +352,50 @@
 				this.closeChildSelector()
 			},
 			loadChildrenList() {
-				try {
-					const stored = uni.getStorageSync('childrenList')
-					if (stored != null && stored != '') {
-						const parsed = JSON.parse(stored.toString())
-						if (Array.isArray(parsed)) {
-							this.childrenList = parsed as ChildInfo[]
+				// 如果未登录，不加载子女列表
+				if (!this.isLoggedIn) {
+					this.childrenList = []
+					return
+				}
+				
+				// 调用API获取子女列表
+				getChildrenList((result: any) => {
+					if (result.success) {
+						// API调用成功，使用服务器返回的数据
+						this.childrenList = result.data
+						
+						// 同时更新本地存储作为缓存
+						try {
+							uni.setStorageSync('childrenList', JSON.stringify(result.data))
+						} catch (e) {
+							console.error('保存子女列表到本地存储失败:', e)
+						}
+						
+						// 加载完成后，更新当前选中的子女
+						this.loadCurrentChild()
+					} else {
+						// API调用失败，尝试从本地存储加载（离线支持）
+						console.error('获取子女列表失败:', result.message)
+						try {
+							const stored = uni.getStorageSync('childrenList')
+							if (stored != null && stored != '') {
+								const parsed = JSON.parse(stored.toString())
+								if (Array.isArray(parsed)) {
+									this.childrenList = parsed as ChildInfo[]
+									// 从本地加载后，也要更新当前选中的子女
+									this.loadCurrentChild()
+								} else {
+									this.childrenList = []
+								}
+							} else {
+								this.childrenList = []
+							}
+						} catch (e) {
+							console.error('从本地存储加载子女列表失败:', e)
+							this.childrenList = []
 						}
 					}
-				} catch (e) {
-					console.error('加载子女列表失败:', e)
-					this.childrenList = []
-				}
+				})
 			},
 			saveChildrenList() {
 				try {
@@ -377,8 +409,9 @@
 					const stored = uni.getStorageSync('currentChildId')
 					if (stored != null && stored != '') {
 						const childId = stored.toString()
+						// 在子女列表中查找匹配的子女
 						for (let i = 0; i < this.childrenList.length; i++) {
-							if (this.childrenList[i].id === childId) {
+							if (this.childrenList[i].id != null && this.childrenList[i].id === childId) {
 								this.currentChild = this.childrenList[i]
 								break
 							}
@@ -392,6 +425,9 @@
 						// 如果没有保存的，使用第一个
 						this.currentChild = this.childrenList[0]
 						this.saveCurrentChild()
+					} else {
+						// 如果没有子女，清空当前选中的子女
+						this.currentChild = null
 					}
 				} catch (e) {
 					console.error('加载当前子女失败:', e)
