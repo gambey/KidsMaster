@@ -178,6 +178,8 @@
 </template>
 
 <script lang="uts">
+	import { getTodoItems, getDailyTodos, batchCreateDailyTodo, completeDailyTodo, uncompleteDailyTodo } from '../../utils/api.uts'
+	
 	type TaskItem = {
 		id: string
 		name: string
@@ -289,11 +291,11 @@
 				const result: TaskItemWithCompleted[] = []
 				for (const dt of roleTasks) {
 					const task = this.allTasks.find(t => t.id === dt.taskId)
-					if (task != null) {
+					if (task != null && task.name != null) {
 						result.push({
 							id: task.id,
 							name: task.name,
-							icon: task.icon,
+							icon: task.icon != null ? task.icon : '📋',
 							role: task.role,
 							path: task.path,
 							completed: dt.completed
@@ -310,7 +312,7 @@
 					return this.availableTasks
 				}
 				const keyword = this.searchKeyword.toLowerCase()
-				return this.availableTasks.filter(t => t.name.toLowerCase().includes(keyword))
+				return this.availableTasks.filter(t => t.name != null && t.name.toLowerCase().includes(keyword))
 			},
 			todayDateText(): string {
 				const now = new Date()
@@ -342,7 +344,92 @@
 				this.stampRecords.set(dateKey, record)
 			},
 			initData() {
-				// 初始化所有任务
+				// 初始化日期
+				const now = new Date()
+				this.currentYear = now.getFullYear()
+				this.currentMonth = now.getMonth()
+
+				// 从API加载事项字典列表
+				this.loadTodoItems()
+				
+				// 加载数据
+				this.loadTaskSettings()
+				this.loadTodayTasks()
+				this.loadStampRecords()
+				this.updateCalendar()
+			},
+			// 从API加载事项字典列表
+			loadTodoItems() {
+				// 加载孩子事项
+				getTodoItems('child', (result) => {
+					if (result.success && result.data != null) {
+						const childTasks: TaskItem[] = []
+						for (let i = 0; i < result.data.length; i++) {
+							const item = result.data[i]
+							// 确保 name 字段存在，如果不存在则使用默认值
+							const itemName = item.name != null && item.name !== '' ? item.name : `任务${item.id}`
+							childTasks.push({
+								id: item.id.toString(),
+								name: itemName,
+								icon: item.icon != null && item.icon !== '' ? item.icon : '📋',
+								role: 'child',
+								path: item.path != null && item.path !== '' ? item.path : undefined
+							})
+						}
+						
+						// 加载家长事项
+						getTodoItems('parent', (parentResult) => {
+							if (parentResult.success && parentResult.data != null) {
+								const parentTasks: TaskItem[] = []
+								for (let i = 0; i < parentResult.data.length; i++) {
+									const item = parentResult.data[i]
+									// 确保 name 字段存在，如果不存在则使用默认值
+									const itemName = item.name != null && item.name !== '' ? item.name : `任务${item.id}`
+									parentTasks.push({
+										id: item.id.toString(),
+										name: itemName,
+										icon: item.icon != null && item.icon !== '' ? item.icon : '📋',
+										role: 'parent',
+										path: item.path != null && item.path !== '' ? item.path : undefined
+									})
+								}
+								
+								// 合并所有任务
+								this.allTasks = childTasks.concat(parentTasks)
+								
+								// 如果API加载失败，使用默认数据作为后备
+								if (this.allTasks.length === 0) {
+									this.allTasks = [
+										{ id: 'schulte', name: '舒尔特方格', icon: '🧩', role: 'child', path: '/pages/game/detail/schulte-detail' },
+										{ id: 'numhearing', name: '听音记数', icon: '🎧', role: 'child', path: '/pages/game/detail/numhearing-detail' },
+										{ id: 'jump-rope', name: '跳绳', icon: '🏃', role: 'child' },
+										{ id: 'reading', name: '阅读', icon: '📖', role: 'child' },
+										{ id: 'training-game', name: '训练游戏', icon: '🎮', role: 'child' },
+										{ id: 'meditation', name: '冥想游戏', icon: '🔤', role: 'child', path: '/pages/game/detail/meditation-detail' },
+										{ id: 'shape', name: '形状识别', icon: '⭐', role: 'child', path: '/pages/game/detail/shape-detail' },
+										{ id: 'memory', name: '记忆挑战', icon: '🧠', role: 'child', path: '/pages/game/detail/memory-detail' },
+										{ id: 'music', name: '音乐节奏', icon: '🎵', role: 'child', path: '/pages/game/detail/music-detail' },
+										{ id: 'love-letter', name: '亲子爱心信', icon: '💌', role: 'parent' },
+										{ id: 'merit-book', name: '功劳簿', icon: '📝', role: 'parent' }
+									]
+								}
+								
+								// 重新加载任务设置和今日任务
+								this.loadTaskSettings()
+								this.loadTodayTasks()
+							} else {
+								// 如果加载失败，使用默认数据
+								this.loadDefaultTasks()
+							}
+						})
+					} else {
+						// 如果加载失败，使用默认数据
+						this.loadDefaultTasks()
+					}
+				})
+			},
+			// 加载默认任务数据（作为后备）
+			loadDefaultTasks() {
 				this.allTasks = [
 					{ id: 'schulte', name: '舒尔特方格', icon: '🧩', role: 'child', path: '/pages/game/detail/schulte-detail' },
 					{ id: 'numhearing', name: '听音记数', icon: '🎧', role: 'child', path: '/pages/game/detail/numhearing-detail' },
@@ -356,17 +443,6 @@
 					{ id: 'love-letter', name: '亲子爱心信', icon: '💌', role: 'parent' },
 					{ id: 'merit-book', name: '功劳簿', icon: '📝', role: 'parent' }
 				]
-
-				// 初始化日期
-				const now = new Date()
-				this.currentYear = now.getFullYear()
-				this.currentMonth = now.getMonth()
-
-				// 加载数据
-				this.loadTaskSettings()
-				this.loadTodayTasks()
-				this.loadStampRecords()
-				this.updateCalendar()
 			},
 			updateCalendar() {
 				const days: CalendarDay[] = []
@@ -460,18 +536,57 @@
 				this.settingsRole = role
 				this.loadTaskSettings()
 			},
-			loadTaskSettings() {
+			// 获取当前孩子ID（从本地存储）
+			getCurrentChildId(): string | null {
 				try {
-					const key = `taskSettings_${this.settingsRole}`
-					const saved = uni.getStorageSync(key)
-					if (saved != null && saved != "") {
-						this.selectedTaskIds = JSON.parse(saved.toString()) as string[]
-					} else {
-						this.selectedTaskIds = []
+					const currentChildStr = uni.getStorageSync('currentChild')
+					if (currentChildStr != null && currentChildStr !== '') {
+						const currentChild = JSON.parse(currentChildStr.toString())
+						if (currentChild != null && currentChild.id != null) {
+							return currentChild.id.toString()
+						}
 					}
 				} catch (e) {
-					this.selectedTaskIds = []
+					console.error('获取当前孩子ID失败:', e)
 				}
+				return null
+			},
+			loadTaskSettings() {
+				// 从API获取今日已选中的事项
+				const today = new Date()
+				const todoDate = this.formatDateKey(today.getFullYear(), today.getMonth() + 1, today.getDate())
+				const childId = this.settingsRole === 'child' ? this.getCurrentChildId() : null
+				
+				getDailyTodos({
+					todo_date: todoDate,
+					child_id: childId,
+					status: 1 // 只获取有效的待办事项
+				}, (result) => {
+					if (result.success && result.data != null) {
+						// 提取已选中的item_id列表
+						const selectedIds: string[] = []
+						for (let i = 0; i < result.data.length; i++) {
+							const todo = result.data[i]
+							if (todo.item_id != null) {
+								selectedIds.push(todo.item_id.toString())
+							}
+						}
+						this.selectedTaskIds = selectedIds
+					} else {
+						// 如果API调用失败，尝试从本地存储加载（向后兼容）
+						try {
+							const key = `taskSettings_${this.settingsRole}`
+							const saved = uni.getStorageSync(key)
+							if (saved != null && saved !== "") {
+								this.selectedTaskIds = JSON.parse(saved.toString()) as string[]
+							} else {
+								this.selectedTaskIds = []
+							}
+						} catch (e) {
+							this.selectedTaskIds = []
+						}
+					}
+				})
 			},
 			isTaskSelected(task: TaskItem): boolean {
 				return this.selectedTaskIds.includes(task.id)
@@ -487,51 +602,131 @@
 				}
 			},
 			saveTaskSettings() {
-				try {
-					const key = `taskSettings_${this.settingsRole}`
-					uni.setStorageSync(key, JSON.stringify(this.selectedTaskIds))
+				const today = new Date()
+				const todoDate = this.formatDateKey(today.getFullYear(), today.getMonth() + 1, today.getDate())
+				const childId = this.settingsRole === 'child' ? this.getCurrentChildId() : null
+				
+				// 先获取今日已有的待办事项，以便删除未选中的
+				getDailyTodos({
+					todo_date: todoDate,
+					child_id: childId,
+					status: 1
+				}, (getResult) => {
+					// 构建要创建的待办事项列表
+					const todosToCreate: any[] = []
+					for (let i = 0; i < this.selectedTaskIds.length; i++) {
+						const itemId = this.selectedTaskIds[i]
+						// 检查是否已存在
+						let exists = false
+						if (getResult.success && getResult.data != null) {
+							for (let j = 0; j < getResult.data.length; j++) {
+								if (getResult.data[j].item_id != null && getResult.data[j].item_id.toString() === itemId) {
+									exists = true
+									break
+								}
+							}
+						}
+						// 如果不存在，则添加到创建列表
+						if (!exists) {
+							todosToCreate.push({
+								item_id: itemId,
+								todo_date: todoDate,
+								child_id: childId,
+								status: 1
+							})
+						}
+					}
 					
-					// 更新今日任务
-					this.loadTodayTasks()
+					// 如果有新的事项需要创建，批量创建
+					if (todosToCreate.length > 0) {
+						batchCreateDailyTodo(todosToCreate, (createResult) => {
+							if (createResult.success) {
+								// 更新今日任务
+								this.loadTodayTasks()
+								
+								uni.showToast({
+									title: '设置成功',
+									icon: 'success'
+								})
+								
+								this.closeSettingsDialog()
+							} else {
+								uni.showToast({
+									title: createResult.message || '保存失败',
+									icon: 'none'
+								})
+							}
+						})
+					} else {
+						// 如果没有新事项，直接更新
+						this.loadTodayTasks()
+						
+						uni.showToast({
+							title: '设置成功',
+							icon: 'success'
+						})
+						
+						this.closeSettingsDialog()
+					}
 					
-					uni.showToast({
-						title: '设置成功',
-						icon: 'success'
-					})
-					
-					this.closeSettingsDialog()
-				} catch (e) {
-					uni.showToast({
-						title: '保存失败',
-						icon: 'none'
-					})
-				}
+					// 同时保存到本地存储（作为后备）
+					try {
+						const key = `taskSettings_${this.settingsRole}`
+						uni.setStorageSync(key, JSON.stringify(this.selectedTaskIds))
+					} catch (e) {
+						// 忽略本地存储错误
+					}
+				})
 			},
 			loadTodayTasks() {
 				const today = new Date()
 				const dateKey = this.formatDateKey(today.getFullYear(), today.getMonth() + 1, today.getDate())
+				const childId = this.getCurrentChildId()
 				
-				// 加载今日任务设置
-				const childSettings = this.getTaskSettings('child')
-				const parentSettings = this.getTaskSettings('parent')
-				
-				// 加载今日完成记录
-				const record = this.getStampRecord(dateKey)
-				
-				// 构建今日任务
-				const childTasks: DailyTask[] = []
-				for (const taskId of childSettings) {
-					const completed = record != null && record.childTasks.find(t => t.taskId === taskId)?.completed === true
-					childTasks.push({ taskId, completed })
-				}
-				this.todayTasks.childTasks = childTasks
-				
-				const parentTasks: DailyTask[] = []
-				for (const taskId of parentSettings) {
-					const completed = record != null && record.parentTasks.find(t => t.taskId === taskId)?.completed === true
-					parentTasks.push({ taskId, completed })
-				}
-				this.todayTasks.parentTasks = parentTasks
+				// 从API加载孩子事项
+				getDailyTodos({
+					todo_date: dateKey,
+					child_id: childId,
+					status: 1
+				}, (childResult) => {
+					const childTasks: DailyTask[] = []
+					if (childResult.success && childResult.data != null) {
+						for (let i = 0; i < childResult.data.length; i++) {
+							const todo = childResult.data[i]
+							if (todo.item_id != null) {
+								childTasks.push({
+									taskId: todo.item_id.toString(),
+									completed: todo.completed === true
+								})
+							}
+						}
+					}
+					this.todayTasks.childTasks = childTasks
+					
+					// 从API加载家长事项（child_id为null）
+					getDailyTodos({
+						todo_date: dateKey,
+						child_id: null,
+						status: 1
+					}, (parentResult) => {
+						const parentTasks: DailyTask[] = []
+						if (parentResult.success && parentResult.data != null) {
+							for (let i = 0; i < parentResult.data.length; i++) {
+								const todo = parentResult.data[i]
+								if (todo.item_id != null) {
+									parentTasks.push({
+										taskId: todo.item_id.toString(),
+										completed: todo.completed === true
+									})
+								}
+							}
+						}
+						this.todayTasks.parentTasks = parentTasks
+						
+						// 更新日历显示
+						this.updateCalendar()
+					})
+				})
 			},
 			getTaskSettings(role: string): string[] {
 				try {
@@ -703,38 +898,126 @@
 			markTaskCompleted(taskId: string, role: string) {
 				const today = new Date()
 				const dateKey = this.formatDateKey(today.getFullYear(), today.getMonth() + 1, today.getDate())
+				const childId = role === 'child' ? this.getCurrentChildId() : null
 				
-				// 确保记录存在
-				let record = this.getStampRecord(dateKey)
-				if (record == null) {
-					record = {
-						date: dateKey,
-						childTasks: this.todayTasks.childTasks,
-						parentTasks: this.todayTasks.parentTasks,
-						childStamped: false,
-						parentStamped: false
+				// 先查找对应的待办事项ID
+				getDailyTodos({
+					todo_date: dateKey,
+					child_id: childId,
+					status: 1
+				}, (result) => {
+					if (result.success && result.data != null) {
+						// 查找匹配的待办事项
+						let foundTodo: any = null
+						for (let i = 0; i < result.data.length; i++) {
+							const todo = result.data[i]
+							if (todo.item_id != null && todo.item_id.toString() === taskId) {
+								foundTodo = todo
+								break
+							}
+						}
+						
+						if (foundTodo != null && foundTodo.id != null) {
+							// 调用API标记完成
+							completeDailyTodo(foundTodo.id, (completeResult) => {
+								if (completeResult.success) {
+									// 更新本地任务状态
+									const tasks = role === 'child' ? this.todayTasks.childTasks : this.todayTasks.parentTasks
+									const task = tasks.find(t => t.taskId === taskId)
+									if (task != null) {
+										task.completed = true
+									} else {
+										tasks.push({ taskId, completed: true })
+									}
+									
+									// 更新日历显示
+									this.updateCalendar()
+									
+									// 检查是否全部完成
+									this.checkAllTasksCompleted()
+								} else {
+									uni.showToast({
+										title: completeResult.message || '标记失败',
+										icon: 'none'
+									})
+								}
+							})
+						} else {
+							// 如果找不到待办事项，可能是还没有创建，先创建再标记完成
+							const childIdForCreate = role === 'child' ? this.getCurrentChildId() : null
+							batchCreateDailyTodo([{
+								item_id: taskId,
+								todo_date: dateKey,
+								child_id: childIdForCreate,
+								status: 1
+							}], (createResult) => {
+								if (createResult.success && createResult.data != null && createResult.data.length > 0) {
+									const newTodo = createResult.data[0]
+									if (newTodo.id != null) {
+										// 创建成功后立即标记完成
+										completeDailyTodo(newTodo.id, (completeResult) => {
+											if (completeResult.success) {
+												// 更新本地任务状态
+												const tasks = role === 'child' ? this.todayTasks.childTasks : this.todayTasks.parentTasks
+												const task = tasks.find(t => t.taskId === taskId)
+												if (task != null) {
+													task.completed = true
+												} else {
+													tasks.push({ taskId, completed: true })
+												}
+												
+												// 更新日历显示
+												this.updateCalendar()
+												
+												// 检查是否全部完成
+												this.checkAllTasksCompleted()
+											}
+										})
+									}
+								} else {
+									uni.showToast({
+										title: '创建待办事项失败',
+										icon: 'none'
+									})
+								}
+							})
+						}
+					} else {
+						// API调用失败，使用本地存储作为后备
+						let record = this.getStampRecord(dateKey)
+						if (record == null) {
+							record = {
+								date: dateKey,
+								childTasks: this.todayTasks.childTasks,
+								parentTasks: this.todayTasks.parentTasks,
+								childStamped: false,
+								parentStamped: false
+							}
+							this.setStampRecord(dateKey, record)
+						}
+						
+						// 更新任务完成状态
+						const tasks = role === 'child' ? record.childTasks : record.parentTasks
+						const task = tasks.find(t => t.taskId === taskId)
+						if (task != null) {
+							task.completed = true
+						} else {
+							tasks.push({ taskId, completed: true })
+						}
+						
+						// 更新今日任务
+						if (role === 'child') {
+							this.todayTasks.childTasks = tasks
+						} else {
+							this.todayTasks.parentTasks = tasks
+						}
+						
+						// 保存记录
+						this.saveStampRecords()
+						this.updateCalendar()
+						this.checkAllTasksCompleted()
 					}
-					this.setStampRecord(dateKey, record)
-				}
-				
-				// 更新任务完成状态
-				const tasks = role === 'child' ? record.childTasks : record.parentTasks
-				const task = tasks.find(t => t.taskId === taskId)
-				if (task != null) {
-					task.completed = true
-				} else {
-					tasks.push({ taskId, completed: true })
-				}
-				
-				// 更新今日任务
-				if (role === 'child') {
-					this.todayTasks.childTasks = tasks
-				} else {
-					this.todayTasks.parentTasks = tasks
-				}
-				
-				// 保存记录
-				this.saveStampRecords()
+				})
 			}
 		}
 	}
@@ -745,7 +1028,7 @@
 		flex: 1;
 		background-color: #F5F5F5;
 	}
-
+	
 	/* 顶部标题栏 */
 	.header {
 		height: 50px;
@@ -1029,7 +1312,7 @@
 		border-bottom-color: #F0F0F0;
 		border-bottom-style: solid;
 	}
-
+	
 	.dialog-title {
 		font-size: 18px;
 		font-weight: bold;
@@ -1152,7 +1435,7 @@
 		color: #333333;
 		text-align: center;
 	}
-
+	
 	.task-card-check {
 		position: absolute;
 		top: 8px;

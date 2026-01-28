@@ -52,16 +52,6 @@
 <script lang="uts">
 	import { addChild } from '../../utils/api.uts'
 	
-	//给服务器的数据结构
-	type ChildInfo = {
-		id?: string
-		child_name: string
-		gender: string
-		age: number
-		grade: string
-		avatar?: string
-	}
-	
 	export default {
 		data() {
 			return {
@@ -102,9 +92,7 @@
 				const name = this.nickname.trim()
 				const ageStr = this.age.toString().trim()
 				const gradeStr = this.grade.trim()
-				const genderStr = this.gender.trim()
 				
-				// 表单验证
 				if (name === '') {
 					uni.showToast({
 						title: '请输入小名',
@@ -113,77 +101,87 @@
 					return
 				}
 				
-				if (ageStr === '' || Number(ageStr) <= 0) {
-					uni.showToast({
-						title: '请输入有效年龄',
-						icon: 'none'
-					})
-					return
-				}
+				// 年龄和年级为可选字段，不再强制要求
 				
-				if (gradeStr === '') {
-					uni.showToast({
-						title: '请输入年级',
-						icon: 'none'
-					})
-					return
-				}
-				
-				
-				// 构建子女信息对象（不包含id，由服务器生成）
-				const newChild: ChildInfo = {
-					child_name: name,
-					gender: genderStr,
-					age: Number(ageStr),
-					grade: gradeStr,
-					avatar: this.avatarUrl != '' ? this.avatarUrl : undefined
-				}
-				
-				// 显示加载提示
 				uni.showLoading({
-					title: '添加中...',
-					mask: true
+					title: '添加中...'
 				})
 				
-				// 调用API添加子女
-				addChild(newChild, (result: any) => {
+				// 准备请求参数
+				const params: any = {
+					child_name: name
+				}
+				
+				// 添加性别（转换为数字：男=1，女=2）
+				if (this.gender === '男') {
+					params.gender = 1
+				} else if (this.gender === '女') {
+					params.gender = 2
+				}
+				
+				// 添加年龄（如果填写了）
+				if (ageStr !== '' && Number(ageStr) > 0) {
+					params.age = Number(ageStr)
+				}
+				
+				// 添加年级（如果填写了）
+				if (gradeStr !== '') {
+					params.grade = gradeStr
+				}
+				
+				// 添加头像（如果有）
+				if (this.avatarUrl != null && this.avatarUrl !== '') {
+					// 注意：如果 avatarUrl 是本地路径，可能需要先上传到服务器获取 URL
+					// 这里暂时直接使用，如果后端不支持本地路径，需要先上传图片
+					params.avatar = this.avatarUrl
+				}
+				
+				// 调用 API 添加子女
+				addChild(params, (result) => {
 					uni.hideLoading()
 					
 					if (result.success) {
-						// 添加成功
 						uni.showToast({
 							title: result.message || '添加成功',
 							icon: 'success'
 						})
 						
-						// 如果返回了子女数据且是第一个，设置为当前子女
-						if (result.data != null && result.data.id != null) {
+						// 如果返回了子女数据，更新本地存储
+						if (result.data != null) {
+							// 加载现有子女列表
+							let childrenList: any[] = []
 							try {
-								// 检查是否已有子女列表
 								const stored = uni.getStorageSync('childrenList')
-								let childrenList: ChildInfo[] = []
-								if (stored != null && stored != '') {
+								if (stored != null && stored !== '') {
 									const parsed = JSON.parse(stored.toString())
 									if (Array.isArray(parsed)) {
-										childrenList = parsed as ChildInfo[]
+										childrenList = parsed as any[]
 									}
 								}
+							} catch (e) {
+								console.error('加载子女列表失败:', e)
+							}
+							
+							// 添加新子女到列表
+							childrenList.push(result.data)
+							
+							// 保存到本地存储
+							try {
+								uni.setStorageSync('childrenList', JSON.stringify(childrenList))
 								
 								// 如果是第一个子女，设置为当前子女
-								if (childrenList.length === 0) {
-									uni.setStorageSync('currentChildId', result.data.id)
+								if (childrenList.length === 1 && result.data.id != null) {
+									uni.setStorageSync('currentChildId', result.data.id.toString())
 								}
 							} catch (e) {
-								console.error('设置当前子女失败:', e)
+								console.error('保存子女列表失败:', e)
 							}
 						}
 						
-						// 延迟返回，让用户看到成功提示
 						setTimeout(() => {
 							uni.navigateBack()
 						}, 1500)
 					} else {
-						// 添加失败
 						uni.showToast({
 							title: result.message || '添加失败，请重试',
 							icon: 'none',

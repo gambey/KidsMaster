@@ -18,10 +18,15 @@
 						<view class="child-avatar-wrapper">
 							<image class="child-avatar" :src="child.avatar || defaultAvatar" mode="aspectFill"></image>
 						</view>
-						<text class="child-item-name">{{ child.child_name }}</text>
+						<text class="child-item-name">{{ child.child_name || child.nickname || '未命名' }}</text>
 					</view>
-					<view class="edit-button" @click="editChild(child)">
-						<text class="edit-button-text">编辑</text>
+					<view class="action-buttons">
+						<view class="edit-button" @click="editChild(child)">
+							<text class="edit-button-text">编辑</text>
+						</view>
+						<view class="delete-button" @click="handleDeleteChild(child)">
+							<text class="delete-button-text">删除</text>
+						</view>
 					</view>
 				</view>
 			</view>
@@ -34,15 +39,18 @@
 </template>
 
 <script lang="uts">
-	import { getChildrenList } from '../../utils/api.uts'
+	import { getChildrenList, deleteChild } from '../../utils/api.uts'
 	
 	type ChildInfo = {
-		id?: string
-		nickname: string
-		gender: string
-		age: number
-		grade: string
+		id?: string | number
+		child_name?: string // API 返回的字段名
+		nickname?: string // 本地使用的字段名（兼容）
+		gender?: string | number
+		age?: number
+		grade?: string
 		avatar?: string
+		remark?: string
+		relation_type?: number
 	}
 	
 	export default {
@@ -63,24 +71,27 @@
 				uni.navigateBack()
 			},
 			loadChildrenList() {
-				// 调用API获取子女列表
-				getChildrenList((result: any) => {
+				uni.showLoading({
+					title: '加载中...'
+				})
+				
+				getChildrenList((result) => {
+					uni.hideLoading()
+					
 					if (result.success) {
-						// API调用成功，使用服务器返回的数据
 						this.childrenList = result.data
 						
-						// 同时更新本地存储作为缓存
+						// 同步更新本地存储（用于缓存）
 						try {
 							uni.setStorageSync('childrenList', JSON.stringify(result.data))
 						} catch (e) {
 							console.error('保存子女列表到本地存储失败:', e)
 						}
 					} else {
-						// API调用失败，尝试从本地存储加载（离线支持）
-						console.error('获取子女列表失败:', result.message)
+						// API 失败时，尝试从本地存储加载（降级处理）
 						try {
 							const stored = uni.getStorageSync('childrenList')
-							if (stored != null && stored != '') {
+							if (stored != null && stored !== '') {
 								const parsed = JSON.parse(stored.toString())
 								if (Array.isArray(parsed)) {
 									this.childrenList = parsed as ChildInfo[]
@@ -95,8 +106,8 @@
 							this.childrenList = []
 						}
 						
-						// 显示错误提示（如果不是网络错误，可能是未登录等）
-						if (result.message.indexOf('未授权') >= 0 || result.message.indexOf('登录') >= 0) {
+						// 显示错误提示（但不影响使用本地数据）
+						if (result.message != null && result.message !== '') {
 							uni.showToast({
 								title: result.message,
 								icon: 'none',
@@ -112,7 +123,6 @@
 				})
 			},
 			goToAddChild() {
-				// 检查是否超过5个子女的限制
 				if (this.childrenList.length >= 5) {
 					uni.showToast({
 						title: '最多只能添加5个子女',
@@ -120,9 +130,60 @@
 					})
 					return
 				}
-				// 跳转到添加子女页面
 				uni.navigateTo({
 					url: '/pages/mine/add-child'
+				})
+			},
+			handleDeleteChild(child: ChildInfo) {
+				// 确认删除
+				const childName = child.child_name || child.nickname || '该子女'
+				uni.showModal({
+					title: '确认删除',
+					content: `确定要删除"${childName}"吗？删除后无法恢复。`,
+					confirmText: '删除',
+					confirmColor: '#FF3B30',
+					success: (res: any) => {
+						if (res.confirm) {
+							// 用户确认删除
+							if (child.id == null) {
+								uni.showToast({
+									title: '子女ID不存在',
+									icon: 'none'
+								})
+								return
+							}
+							
+							uni.showLoading({
+								title: '删除中...'
+							})
+							
+							deleteChild(child.id, (result) => {
+								uni.hideLoading()
+								
+								if (result.success) {
+									uni.showToast({
+										title: result.message || '删除成功',
+										icon: 'success'
+									})
+									
+									// 如果删除的是当前子女，清除当前子女ID
+									const currentChildId = uni.getStorageSync('currentChildId')
+									if (currentChildId != null && currentChildId !== '' && child.id != null && currentChildId.toString() === child.id.toString()) {
+										uni.removeStorageSync('currentChildId')
+									}
+									
+									// 重新从服务器加载列表
+									this.loadChildrenList()
+								} else {
+									uni.showToast({
+										title: result.message || '删除失败，请重试',
+										icon: 'none',
+										duration: 2000
+									})
+								}
+							})
+						}
+					}
 				})
 			}
 		}
@@ -211,6 +272,12 @@
 		font-weight: bold;
 	}
 	
+	.action-buttons {
+		flex-direction: row;
+		align-items: center;
+		gap: 8px;
+	}
+	
 	.edit-button {
 		padding: 8px 16px;
 		background-color: #F368E0;
@@ -222,6 +289,22 @@
 	}
 	
 	.edit-button-text {
+		font-size: 14px;
+		color: #FFFFFF;
+		font-weight: bold;
+	}
+	
+	.delete-button {
+		padding: 8px 16px;
+		background-color: #FF3B30;
+		border-radius: 8px;
+	}
+	
+	.delete-button:active {
+		opacity: 0.8;
+	}
+	
+	.delete-button-text {
 		font-size: 14px;
 		color: #FFFFFF;
 		font-weight: bold;

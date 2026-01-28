@@ -31,19 +31,21 @@
 			</view>
 		</view>
 		<!-- 子女卡片 -->
-		<view class="child-card" v-if="isLoggedIn && currentChild != null">
-			<view class="child-card-content">
-				<view class="child-avatar-wrapper">
-					<image class="child-avatar" :src="currentChild.avatar || avatarUrl" mode="aspectFill"></image>
-				</view>
-				<text class="child-name">{{ currentChild.child_name || '孩子昵称' }}</text>
-			</view>
-			<view class="child-card-actions">
-				<view class="child-action-button manage-button" @click="goToChildManagement">
-					<text class="action-button-text">管理</text>
-				</view>
-				<view class="child-action-button switch-button" @click="openChildSelector">
-					<text class="action-button-text">切换</text>
+		<view class="child-card-wrapper" v-if="isLoggedIn && currentChild != null">
+			<view class="child-card">
+				<view class="child-card-content">
+					<view class="child-avatar-wrapper">
+						<image class="child-avatar" :src="currentChild.avatar || avatarUrl" mode="aspectFill"></image>
+					</view>
+					<text class="child-name">{{ currentChild.child_name || '孩子昵称' }}</text>
+					<view class="child-card-actions">
+						<view class="child-action-button manage-button" @click="goToChildManagement">
+							<text class="action-button-text">管理</text>
+						</view>
+						<view class="child-action-button switch-button" @click="openChildSelector">
+							<text class="action-button-text">切换</text>
+						</view>
+					</view>
 				</view>
 			</view>
 		</view>
@@ -116,8 +118,8 @@
 						<view class="child-selector-avatar-wrapper">
 							<image class="child-selector-avatar" :src="child.avatar || avatarUrl" mode="aspectFill"></image>
 						</view>
-						<text class="child-selector-name">{{ child.child_name }}</text>
-						<text class="check-icon" v-if="currentChild != null && currentChild.id != null && child.id != null && currentChild.id === child.id">✓</text>
+						<text class="child-selector-name">{{ child.child_name || child.nickname || '未命名' }}</text>
+						<text class="check-icon" v-if="isChildSelected(child)">✓</text>
 					</view>
 				</view>
 				<view class="selector-actions">
@@ -137,12 +139,15 @@
 	import { login, getChildrenList } from '../../utils/api.uts'
 	
 	type ChildInfo = {
-		id?: string
-		nickname: string
-		gender: string
-		age: number
-		grade: string
+		id?: string | number
+		child_name?: string // API 返回的字段名
+		nickname?: string // 兼容旧字段名
+		gender?: string | number
+		age?: number
+		grade?: string
 		avatar?: string
+		remark?: string
+		relation_type?: number
 	}
 	
 	export default {
@@ -168,13 +173,13 @@
 		},
 		onLoad() {
 			this.loadAuthInfo()
+			// loadChildrenList 内部会调用 loadCurrentChild
 			this.loadChildrenList()
-			this.loadCurrentChild()
 		},
 		onShow() {
 			// 页面显示时重新加载数据
+			// loadChildrenList 内部会调用 loadCurrentChild
 			this.loadChildrenList()
-			this.loadCurrentChild()
 		},
 		methods: {
 			openAuthDialog() {
@@ -201,6 +206,17 @@
 				login(name, pwd, (res: any) => {
 					uni.hideLoading()
 					if (res.success) {
+						// 清除旧账号的子女数据
+						this.childrenList = []
+						this.currentChild = null
+						this.selectedChild = null
+						try {
+							uni.removeStorageSync('childrenList')
+							uni.removeStorageSync('currentChildId')
+						} catch (e) {
+							console.error('清除旧数据失败:', e)
+						}
+						
 						this.authToken = res.token
 						this.authPhoneNumber = name
 						try {
@@ -217,6 +233,9 @@
 						// 清空输入框
 						this.phoneNumber = ''
 						this.password = ''
+						
+						// 重新加载新账号的子女数据
+						this.loadChildrenList()
 					} else {
 						uni.showToast({
 							title: res.message || '登录失败',
@@ -225,24 +244,46 @@
 					}
 				})
 			},
-			loadAuthInfo() {
-				try {
-					const token = uni.getStorageSync('authToken')
-					const phone = uni.getStorageSync('authPhoneNumber')
-					if (token != null && token != '' && phone != null && phone != '') {
-						this.authToken = token.toString()
-						this.authPhoneNumber = phone.toString()
+		loadAuthInfo() {
+			try {
+				const token = uni.getStorageSync('authToken')
+				const phone = uni.getStorageSync('authPhoneNumber')
+				if (token != null && token != '' && phone != null && phone !== '') {
+					const newPhone = phone.toString()
+					const newToken = token.toString()
+					
+					// 检测账号是否切换（手机号变化）
+					if (this.authPhoneNumber != null && this.authPhoneNumber !== '' && this.authPhoneNumber !== newPhone) {
+						// 账号已切换，清除旧账号的子女数据
+						this.childrenList = []
+						this.currentChild = null
+						this.selectedChild = null
+						try {
+							uni.removeStorageSync('childrenList')
+							uni.removeStorageSync('currentChildId')
+						} catch (e) {
+							console.error('清除旧账号数据失败:', e)
+						}
 					}
-				} catch (e) {
-					console.error('加载登录信息失败:', e)
+					
+					this.authToken = newToken
+					this.authPhoneNumber = newPhone
+				} else {
+					// 未登录状态，清除数据
+					this.authToken = ''
+					this.authPhoneNumber = ''
 				}
-			},
+			} catch (e) {
+				console.error('加载登录信息失败:', e)
+			}
+		},
 			handleLogout() {
 				uni.showModal({
 					title: '提示',
 					content: '确定要退出账号吗？',
 					success: (res: any) => {
 						if (res.confirm) {
+							// 清除登录信息
 							this.authToken = ''
 							this.authPhoneNumber = ''
 							try {
@@ -251,6 +292,18 @@
 							} catch (e) {
 								console.error('清除登录信息失败:', e)
 							}
+							
+							// 清除子女数据
+							this.childrenList = []
+							this.currentChild = null
+							this.selectedChild = null
+							try {
+								uni.removeStorageSync('childrenList')
+								uni.removeStorageSync('currentChildId')
+							} catch (e) {
+								console.error('清除子女数据失败:', e)
+							}
+							
 							uni.showToast({
 								title: '已退出账号',
 								icon: 'success'
@@ -340,6 +393,17 @@
 			selectChild(child: ChildInfo) {
 				this.selectedChild = child
 			},
+			isChildSelected(child: ChildInfo): boolean {
+				// 如果有选中的子女，检查是否匹配
+				if (this.selectedChild != null && this.selectedChild.id != null && child.id != null) {
+					return this.selectedChild.id.toString() === child.id.toString()
+				}
+				// 如果没有选中的，检查是否是当前子女
+				if (this.currentChild != null && this.currentChild.id != null && child.id != null) {
+					return this.currentChild.id.toString() === child.id.toString()
+				}
+				return false
+			},
 			confirmChildSelection() {
 				if (this.selectedChild != null) {
 					this.currentChild = this.selectedChild
@@ -352,38 +416,48 @@
 				this.closeChildSelector()
 			},
 			loadChildrenList() {
-				// 如果未登录，不加载子女列表
+				// 如果未登录，从本地存储加载
 				if (!this.isLoggedIn) {
-					this.childrenList = []
+					try {
+						const stored = uni.getStorageSync('childrenList')
+						if (stored != null && stored !== '') {
+							const parsed = JSON.parse(stored.toString())
+							if (Array.isArray(parsed)) {
+								this.childrenList = parsed as ChildInfo[]
+							} else {
+								this.childrenList = []
+							}
+						} else {
+							this.childrenList = []
+						}
+					} catch (e) {
+						console.error('加载子女列表失败:', e)
+						this.childrenList = []
+					}
+					// 加载完子女列表后，更新当前子女
+					this.loadCurrentChild()
 					return
 				}
 				
-				// 调用API获取子女列表
-				getChildrenList((result: any) => {
+				// 已登录时，从服务器获取
+				getChildrenList((result) => {
 					if (result.success) {
-						// API调用成功，使用服务器返回的数据
 						this.childrenList = result.data
 						
-						// 同时更新本地存储作为缓存
+						// 同步更新本地存储（用于缓存）
 						try {
 							uni.setStorageSync('childrenList', JSON.stringify(result.data))
 						} catch (e) {
 							console.error('保存子女列表到本地存储失败:', e)
 						}
-						
-						// 加载完成后，更新当前选中的子女
-						this.loadCurrentChild()
 					} else {
-						// API调用失败，尝试从本地存储加载（离线支持）
-						console.error('获取子女列表失败:', result.message)
+						// API 失败时，尝试从本地存储加载（降级处理）
 						try {
 							const stored = uni.getStorageSync('childrenList')
-							if (stored != null && stored != '') {
+							if (stored != null && stored !== '') {
 								const parsed = JSON.parse(stored.toString())
 								if (Array.isArray(parsed)) {
 									this.childrenList = parsed as ChildInfo[]
-									// 从本地加载后，也要更新当前选中的子女
-									this.loadCurrentChild()
 								} else {
 									this.childrenList = []
 								}
@@ -395,6 +469,9 @@
 							this.childrenList = []
 						}
 					}
+					
+					// 加载完子女列表后，更新当前子女
+					this.loadCurrentChild()
 				})
 			},
 			saveChildrenList() {
@@ -406,13 +483,20 @@
 			},
 			loadCurrentChild() {
 				try {
+					// 如果子女列表为空，清除当前子女
+					if (this.childrenList.length === 0) {
+						this.currentChild = null
+						this.saveCurrentChild()
+						return
+					}
+					
 					const stored = uni.getStorageSync('currentChildId')
-					if (stored != null && stored != '') {
+					if (stored != null && stored !== '') {
 						const childId = stored.toString()
-						// 在子女列表中查找匹配的子女
 						for (let i = 0; i < this.childrenList.length; i++) {
-							if (this.childrenList[i].id != null && this.childrenList[i].id === childId) {
-								this.currentChild = this.childrenList[i]
+							const child = this.childrenList[i]
+							if (child.id != null && child.id.toString() === childId) {
+								this.currentChild = child
 								break
 							}
 						}
@@ -425,9 +509,6 @@
 						// 如果没有保存的，使用第一个
 						this.currentChild = this.childrenList[0]
 						this.saveCurrentChild()
-					} else {
-						// 如果没有子女，清空当前选中的子女
-						this.currentChild = null
 					}
 				} catch (e) {
 					console.error('加载当前子女失败:', e)
@@ -435,8 +516,8 @@
 			},
 			saveCurrentChild() {
 				try {
-					if (this.currentChild != null) {
-						uni.setStorageSync('currentChildId', this.currentChild.id)
+					if (this.currentChild != null && this.currentChild.id != null) {
+						uni.setStorageSync('currentChildId', this.currentChild.id.toString())
 					} else {
 						uni.removeStorageSync('currentChildId')
 					}
@@ -750,12 +831,17 @@
 	}
 	
 	/* 子女卡片样式 */
+	.child-card-wrapper {
+		width: 100%;
+		padding: 0 20px;
+		margin-bottom: 15px;
+	}
+	
 	.child-card {
 		width: 100%;
 		background-color: #FFFFFF;
 		border-radius: 15px;
 		padding: 16px;
-		margin-bottom: 20px;
 		border: 3px solid #FFFFFF;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	}
@@ -763,7 +849,6 @@
 	.child-card-content {
 		flex-direction: row;
 		align-items: center;
-		margin-bottom: 12px;
 	}
 	
 	.child-avatar-wrapper {
@@ -790,16 +875,17 @@
 	
 	.child-card-actions {
 		flex-direction: row;
-		justify-content: space-between;
+		align-items: center;
+		gap: 8px;
+		margin-left: 12px;
 	}
 	
 	.child-action-button {
-		flex: 1;
-		padding: 10px 0;
+		padding: 8px 20px;
 		border-radius: 10px;
 		align-items: center;
 		justify-content: center;
-		margin: 0 5px;
+		min-width: 60px;
 	}
 	
 	.manage-button {

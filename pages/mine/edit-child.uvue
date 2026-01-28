@@ -19,8 +19,8 @@
 			
 			<view class="form-section">
 				<view class="form-item">
-					<text class="form-label">小名</text>
-					<input class="form-input" v-model="child_name" placeholder="请输入小名" />
+					<text class="form-label">昵称</text>
+					<input class="form-input" v-model="child_name" placeholder="请输入昵称" />
 				</view>
 				
 				<view class="form-item">
@@ -40,7 +40,7 @@
 				
 				<view class="form-item">
 					<text class="form-label">年级</text>
-					<input class="form-input" v-model="grade" placeholder="请输入年级" />
+					<input class="form-input" v-model="grade_name" placeholder="请输入年级" />
 				</view>
 			</view>
 			
@@ -52,17 +52,19 @@
 </template>
 
 <script lang="uts">
-	import { updateChild, deleteChild, getChildrenList } from '../../utils/api.uts'
-	/**
-	 * 服务器子女信息类型定义
-	 */
+	import { getChildrenList, updateChild, deleteChild as deleteChildApi } from '../../utils/api.uts'
+	
 	type ChildInfo = {
-		id?: string
-		child_name: string
-		gender:string
-		age: number
-		grade: string
+		id?: string | number
+		child_name?: string // API 返回的字段名
+		nickname?: string // 兼容旧字段名
+		gender?: string | number // 可能是 '男'/'女' 或 1/2
+		age?: number
+		grade?: string // API 返回的字段名
+		grade_name?: string // 兼容旧字段名
 		avatar?: string
+		remark?: string
+		relation_type?: number
 	}
 	
 	export default {
@@ -75,7 +77,7 @@
 				genderIndex: 0,
 				genderOptions: ['男', '女'],
 				age: '',
-				grade: ''
+				grade_name: ''
 			}
 		},
 		onLoad(options: any) {
@@ -89,30 +91,117 @@
 				uni.navigateBack()
 			},
 			loadChildInfo() {
-				try {
-					const stored = uni.getStorageSync('childrenList')
-					if (stored != null && stored != '') {
-						const parsed = JSON.parse(stored.toString())
-						if (Array.isArray(parsed)) {
-							const childrenList = parsed as ChildInfo[]
-							for (let i = 0; i < childrenList.length; i++) {
-								if (childrenList[i].id?.toString() === this.childId) {
-									const child = childrenList[i]
-									this.child_name = child.child_name
-									this.gender = child.gender
-									this.age = child.age.toString()
-									this.grade = child.grade_name
-									this.avatarUrl = child.avatar != null ? child.avatar : ''
-									
-									// 设置性别索引
-									this.genderIndex = child.gender
+				uni.showLoading({
+					title: '加载中...'
+				})
+				
+				// 先从服务器获取最新数据
+				getChildrenList((result) => {
+					if (result.success && result.data != null && Array.isArray(result.data)) {
+						// 从服务器数据中查找
+						const childrenList = result.data as ChildInfo[]
+						this.loadChildFromList(childrenList)
+						
+						// 同步更新本地存储
+						try {
+							uni.setStorageSync('childrenList', JSON.stringify(childrenList))
+						} catch (e) {
+							console.error('保存子女列表到本地存储失败:', e)
+						}
+					} else {
+						// API 失败时，从本地存储加载（降级处理）
+						try {
+							const stored = uni.getStorageSync('childrenList')
+							if (stored != null && stored !== '') {
+								const parsed = JSON.parse(stored.toString())
+								if (Array.isArray(parsed)) {
+									const childrenList = parsed as ChildInfo[]
+									this.loadChildFromList(childrenList)
+								} else {
+									uni.hideLoading()
+									uni.showToast({
+										title: '未找到子女信息',
+										icon: 'none'
+									})
+								}
+							} else {
+								uni.hideLoading()
+								uni.showToast({
+									title: '未找到子女信息',
+									icon: 'none'
+								})
+							}
+						} catch (e) {
+							console.error('从本地存储加载子女信息失败:', e)
+							uni.hideLoading()
+							uni.showToast({
+								title: '加载失败，请重试',
+								icon: 'none'
+							})
+						}
+					}
+				})
+			},
+			loadChildFromList(childrenList: ChildInfo[]) {
+				// 查找匹配的子女（支持字符串和数字 ID 比较）
+				let found = false
+				for (let i = 0; i < childrenList.length; i++) {
+					const child = childrenList[i]
+					if (child.id != null) {
+						// 转换为字符串进行比较
+						const childIdStr = child.id.toString()
+						if (childIdStr === this.childId) {
+							found = true
+							
+							// 加载姓名
+							this.child_name = child.child_name || child.nickname || ''
+							
+							// 加载性别（处理数字和字符串）
+							if (child.gender != null) {
+								if (typeof child.gender === 'number') {
+									// 数字：1=男，2=女
+									this.gender = child.gender === 1 ? '男' : '女'
+								} else {
+									// 字符串：'男' 或 '女'
+									this.gender = child.gender.toString()
+								}
+							} else {
+								this.gender = '男'
+							}
+							
+							// 设置性别索引
+							for (let j = 0; j < this.genderOptions.length; j++) {
+								if (this.genderOptions[j] === this.gender) {
+									this.genderIndex = j
 									break
 								}
 							}
+							
+							// 加载年龄
+							if (child.age != null) {
+								this.age = child.age.toString()
+							} else {
+								this.age = ''
+							}
+							
+							// 加载年级（处理字段名差异）
+							this.grade_name = child.grade || child.grade_name || ''
+							
+							// 加载头像
+							this.avatarUrl = child.avatar != null && child.avatar !== '' ? child.avatar : ''
+							
+							break
 						}
 					}
-				} catch (e) {
-					console.error('加载子女信息失败:', e)
+				}
+				
+				uni.hideLoading()
+				
+				if (!found) {
+					uni.showToast({
+						title: '未找到子女信息',
+						icon: 'none'
+					})
 				}
 			},
 			chooseAvatar() {
@@ -136,9 +225,12 @@
 				this.gender = this.genderOptions[index]
 			},
 			handleDelete() {
+				const childName = this.child_name || '该子女'
 				uni.showModal({
-					title: '提示',
-					content: '确定要删除这个子女吗？',
+					title: '确认删除',
+					content: `确定要删除"${childName}"吗？删除后无法恢复。`,
+					confirmText: '删除',
+					confirmColor: '#FF3B30',
 					success: (res: any) => {
 						if (res.confirm) {
 							this.deleteChild()
@@ -147,60 +239,37 @@
 				})
 			},
 			deleteChild() {
-				// 显示加载提示
+				if (this.childId == null || this.childId === '') {
+					uni.showToast({
+						title: '子女ID不存在',
+						icon: 'none'
+					})
+					return
+				}
+				
 				uni.showLoading({
-					title: '删除中...',
-					mask: true
+					title: '删除中...'
 				})
 				
-				// 调用API删除子女
-				deleteChild(this.childId, (result: any) => {
+				deleteChildApi(this.childId, (result) => {
 					uni.hideLoading()
 					
 					if (result.success) {
-						// 删除成功，更新本地存储
-						try {
-							const stored = uni.getStorageSync('childrenList')
-							if (stored != null && stored != '') {
-								const parsed = JSON.parse(stored.toString())
-								if (Array.isArray(parsed)) {
-									let childrenList = parsed as ChildInfo[]
-									// 过滤掉要删除的子女
-									const newList: ChildInfo[] = []
-									for (let i = 0; i < childrenList.length; i++) {
-										if (childrenList[i].id != null && childrenList[i].id !== this.childId) {
-											newList.push(childrenList[i])
-										}
-									}
-									
-									// 保存更新后的列表
-									uni.setStorageSync('childrenList', JSON.stringify(newList))
-									
-									// 如果删除的是当前选中的子女，需要更新
-									const currentChildId = uni.getStorageSync('currentChildId')
-									if (currentChildId != null && currentChildId.toString() === this.childId) {
-										if (newList.length > 0 && newList[0].id != null) {
-											uni.setStorageSync('currentChildId', newList[0].id)
-										} else {
-											uni.removeStorageSync('currentChildId')
-										}
-									}
-								}
-							}
-						} catch (e) {
-							console.error('更新本地存储失败:', e)
-						}
-						
 						uni.showToast({
 							title: result.message || '删除成功',
 							icon: 'success'
 						})
 						
+						// 如果删除的是当前子女，清除当前子女ID
+						const currentChildId = uni.getStorageSync('currentChildId')
+						if (currentChildId != null && currentChildId !== '' && currentChildId.toString() === this.childId) {
+							uni.removeStorageSync('currentChildId')
+						}
+						
 						setTimeout(() => {
 							uni.navigateBack()
 						}, 1500)
 					} else {
-						// 删除失败
 						uni.showToast({
 							title: result.message || '删除失败，请重试',
 							icon: 'none',
@@ -212,9 +281,8 @@
 			handleConfirm() {
 				const name = this.child_name.trim()
 				const ageStr = this.age.toString().trim()
-				const gradeStr = this.grade.trim()
+				const gradeStr = this.grade_name.trim()
 				
-				// 表单验证
 				if (name === '') {
 					uni.showToast({
 						title: '请输入小名',
@@ -223,81 +291,102 @@
 					return
 				}
 				
-				if (ageStr === '' || Number(ageStr) <= 0) {
+				// 年龄和年级为可选字段，不再强制要求
+				
+				if (this.childId == null || this.childId === '') {
 					uni.showToast({
-						title: '请输入有效年龄',
+						title: '子女ID不存在',
 						icon: 'none'
 					})
 					return
 				}
 				
-				if (gradeStr === '') {
-					uni.showToast({
-						title: '请输入年级',
-						icon: 'none'
-					})
-					return
-				}
-				
-				// 构建更新后的子女信息对象
-				const updatedChild: ChildInfo = {
-					child_name: name,
-					gender: this.gender,	
-					age: Number(ageStr),
-					grade: gradeStr,
-					avatar: this.avatarUrl != '' ? this.avatarUrl : undefined
-				}
-				
-				// 显示加载提示
 				uni.showLoading({
-					title: '保存中...',
-					mask: true
+					title: '保存中...'
 				})
 				
-				// 调用API更新子女信息
-				updateChild(this.childId, updatedChild, (result: any) => {
+				// 准备更新参数
+				const params: any = {
+					child_name: name
+				}
+				
+				// 添加性别（转换为数字：男=1，女=2）
+				if (this.gender === '男') {
+					params.gender = 1
+				} else if (this.gender === '女') {
+					params.gender = 2
+				}
+				
+				// 添加年龄（如果填写了）
+				if (ageStr !== '' && Number(ageStr) > 0) {
+					params.age = Number(ageStr)
+				}
+				
+				// 添加年级（如果填写了）
+				if (gradeStr !== '') {
+					params.grade = gradeStr
+				}
+				
+				// 添加头像（如果有）
+				if (this.avatarUrl != null && this.avatarUrl !== '') {
+					// 注意：如果 avatarUrl 是本地路径，可能需要先上传到服务器获取 URL
+					// 这里暂时直接使用，如果后端不支持本地路径，需要先上传图片
+					params.avatar = this.avatarUrl
+				}
+				
+				// 调用 API 更新子女信息
+				updateChild(this.childId, params, (result) => {
 					uni.hideLoading()
 					
 					if (result.success) {
-						// 更新成功，同步更新本地存储
-						try {
-							const stored = uni.getStorageSync('childrenList')
-							if (stored != null && stored != '') {
-								const parsed = JSON.parse(stored.toString())
-								if (Array.isArray(parsed)) {
-									const childrenList = parsed as ChildInfo[]
-									// 更新子女信息
-									for (let i = 0; i < childrenList.length; i++) {
-										if (childrenList[i].id != null && childrenList[i].id?.toString() === this.childId) {
-											childrenList[i].child_name = name
-											childrenList[i].gender = this.gender
-											childrenList[i].age = Number(ageStr)
-											childrenList[i].grade = gradeStr
-											if (this.avatarUrl != '') {
-												childrenList[i].avatar = this.avatarUrl
-											}
-											break
-										}
-									}
-									
-									// 保存更新后的列表
-									uni.setStorageSync('childrenList', JSON.stringify(childrenList))
-								}
-							}
-						} catch (e) {
-							console.error('更新本地存储失败:', e)
-						}
-						
 						uni.showToast({
 							title: result.message || '保存成功',
 							icon: 'success'
 						})
 						
+						// 如果返回了更新后的数据，更新本地存储
+						if (result.data != null) {
+							// 加载现有子女列表
+							let childrenList: ChildInfo[] = []
+							try {
+								const stored = uni.getStorageSync('childrenList')
+								if (stored != null && stored !== '') {
+									const parsed = JSON.parse(stored.toString())
+									if (Array.isArray(parsed)) {
+										childrenList = parsed as ChildInfo[]
+									}
+								}
+							} catch (e) {
+								console.error('加载子女列表失败:', e)
+							}
+							
+							// 更新列表中的子女信息
+							let found = false
+							for (let i = 0; i < childrenList.length; i++) {
+								if (childrenList[i].id != null && childrenList[i].id.toString() === this.childId) {
+									childrenList[i] = result.data
+									found = true
+									break
+								}
+							}
+							
+							// 如果没找到，添加新的
+							if (!found) {
+								childrenList.push(result.data)
+							}
+							
+							// 保存到本地存储
+							try {
+								uni.setStorageSync('childrenList', JSON.stringify(childrenList))
+							} catch (e) {
+								console.error('保存子女列表失败:', e)
+							}
+						}
+						
 						setTimeout(() => {
 							uni.navigateBack()
 						}, 1500)
 					} else {
-						// 更新失败
 						uni.showToast({
 							title: result.message || '保存失败，请重试',
 							icon: 'none',
