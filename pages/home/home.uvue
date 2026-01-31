@@ -73,9 +73,15 @@
 					v-for="task in currentTasks" 
 					:key="task.id"
 				>
-					<text class="task-name">{{ task.name }}</text>
-					<view v-if="task.completed" class="task-completed">
-						<text class="check-icon">✓</text>
+					<text class="task-name">{{ task.item_name }}</text>
+					<view v-if="task.completed" class="task-completed-stamp">
+						<text class="stamp-text">已完成</text>
+					</view>
+					<view v-else-if="formatTaskProgress(task)" class="task-progress-wrap">
+						<text class="task-progress-text">{{ formatTaskProgress(task) }}</text>
+						<view class="task-action task-action-small" @click="goToCompleteTask(task)">
+							<text class="complete-button">继续</text>
+						</view>
 					</view>
 					<view v-else class="task-action" @click="goToCompleteTask(task)">
 						<text class="complete-button">去完成</text>
@@ -136,7 +142,7 @@
 								<view class="task-card-icon">
 									<text class="task-card-emoji">{{ task.icon }}</text>
 								</view>
-								<text class="task-card-name">{{ task.name }}</text>
+								<text class="task-card-name">{{ task.item_name }}</text>
 								<view class="task-card-check" v-if="isTaskSelected(task)">
 									<text class="task-card-check-icon">✓</text>
 								</view>
@@ -178,23 +184,30 @@
 </template>
 
 <script lang="uts">
-	import { getTodoItems, getDailyTodos, batchCreateDailyTodo, completeDailyTodo, uncompleteDailyTodo } from '../../utils/api.uts'
+	import { getTodoItems, getDailyTodos, batchCreateDailyTodo, completeDailyTodo, uncompleteDailyTodo, deleteDailyTodo } from '../../utils/api.uts'
 	
 	type TaskItem = {
 		id: string
-		name: string
+		item_name: string
 		icon: string
-		role: string // 'child' | 'parent'
-		path?: string // 跳转路径
+		role: string // 'child' | 'parent' (保留用于兼容)
+		item_type?: number // 1 = 儿童，2 = 家长
+		path_url?: string // 跳转路径
 	}
 
 	type TaskItemWithCompleted = {
 		id: string
-		name: string
+		item_name: string
 		icon: string
 		role: string
-		path?: string
+		path_url?: string
 		completed: boolean
+		// 已开始未完成时的进度（completion_type 2=次数 3=时长）
+		progress_count?: number | null
+		progress_duration_minutes?: number | null
+		completion_type?: number | null
+		completion_target?: number | null
+		completion_unit?: string | null
 	}
 
 	type CalendarDay = {
@@ -209,6 +222,11 @@
 	type DailyTask = {
 		taskId: string
 		completed: boolean
+		progress_count?: number | null
+		progress_duration_minutes?: number | null
+		completion_type?: number | null
+		completion_target?: number | null
+		completion_unit?: string | null
 	}
 
 	type DailyRecord = {
@@ -250,6 +268,11 @@
 					childTasks: [] as DailyTask[],
 					parentTasks: [] as DailyTask[]
 				} as TodayTasks,
+				// 今日每日待办原始列表（含 id，用于事项跳转传 todoId）
+				todayDailyTodos: {
+					child: [] as any[],
+					parent: [] as any[]
+				},
 				// 打卡记录
 				stampRecords: new Map<string, DailyRecord>()
 			}
@@ -291,28 +314,38 @@
 				const result: TaskItemWithCompleted[] = []
 				for (const dt of roleTasks) {
 					const task = this.allTasks.find(t => t.id === dt.taskId)
-					if (task != null && task.name != null) {
+					if (task != null && task.item_name != null) {
 						result.push({
 							id: task.id,
-							name: task.name,
+							item_name: task.item_name,
 							icon: task.icon != null ? task.icon : '📋',
 							role: task.role,
-							path: task.path,
-							completed: dt.completed
+							path_url: task.path_url,
+							completed: dt.completed,
+							progress_count: dt.progress_count,
+							progress_duration_minutes: dt.progress_duration_minutes,
+							completion_type: dt.completion_type,
+							completion_target: dt.completion_target,
+							completion_unit: dt.completion_unit
 						})
 					}
 				}
 				return result
 			},
 			availableTasks(): TaskItem[] {
-				return this.allTasks.filter(t => t.role === this.settingsRole)
+				// 根据 item_type 过滤：item_type=1 显示在儿童标签下，item_type=2 显示在家长标签下
+				if (this.settingsRole === 'child') {
+					return this.allTasks.filter(t => t.item_type === 1)
+				} else {
+					return this.allTasks.filter(t => t.item_type === 2)
+				}
 			},
 			filteredAvailableTasks(): TaskItem[] {
 				if (this.searchKeyword.trim() === '') {
 					return this.availableTasks
 				}
 				const keyword = this.searchKeyword.toLowerCase()
-				return this.availableTasks.filter(t => t.name != null && t.name.toLowerCase().includes(keyword))
+				return this.availableTasks.filter(t => t.item_name != null && t.item_name.toLowerCase().includes(keyword))
 			},
 			todayDateText(): string {
 				const now = new Date()
@@ -360,68 +393,55 @@
 			},
 			// 从API加载事项字典列表
 			loadTodoItems() {
-				// 加载孩子事项
-				getTodoItems('child', (result) => {
+				// 加载所有事项（不传 role 参数获取全部）
+				getTodoItems(null, (result) => {
 					if (result.success && result.data != null) {
-						const childTasks: TaskItem[] = []
+						const allTasksList: TaskItem[] = []
 						for (let i = 0; i < result.data.length; i++) {
 							const item = result.data[i]
-							// 确保 name 字段存在，如果不存在则使用默认值
-							const itemName = item.name != null && item.name !== '' ? item.name : `任务${item.id}`
-							childTasks.push({
+							// 优先使用 item_name，如果没有则使用 name，都没有则使用默认值
+							const itemName = (item.item_name != null && item.item_name !== '') 
+								? item.item_name 
+								: (item.name != null && item.name !== '') 
+									? item.name 
+									: `任务${item.id}`
+							
+							// 根据 item_type 确定 role（用于兼容）
+							const itemType = item.item_type != null ? item.item_type : (item.role === 'parent' ? 2 : 1)
+							const role = itemType === 2 ? 'parent' : 'child'
+							
+							allTasksList.push({
 								id: item.id.toString(),
-								name: itemName,
+								item_name: itemName,
 								icon: item.icon != null && item.icon !== '' ? item.icon : '📋',
-								role: 'child',
-								path: item.path != null && item.path !== '' ? item.path : undefined
+								role: role,
+								item_type: itemType,
+								path_url: item.path_url != null && item.path_url !== '' ? item.path_url : undefined
 							})
 						}
 						
-						// 加载家长事项
-						getTodoItems('parent', (parentResult) => {
-							if (parentResult.success && parentResult.data != null) {
-								const parentTasks: TaskItem[] = []
-								for (let i = 0; i < parentResult.data.length; i++) {
-									const item = parentResult.data[i]
-									// 确保 name 字段存在，如果不存在则使用默认值
-									const itemName = item.name != null && item.name !== '' ? item.name : `任务${item.id}`
-									parentTasks.push({
-										id: item.id.toString(),
-										name: itemName,
-										icon: item.icon != null && item.icon !== '' ? item.icon : '📋',
-										role: 'parent',
-										path: item.path != null && item.path !== '' ? item.path : undefined
-									})
-								}
-								
-								// 合并所有任务
-								this.allTasks = childTasks.concat(parentTasks)
-								
-								// 如果API加载失败，使用默认数据作为后备
-								if (this.allTasks.length === 0) {
-									this.allTasks = [
-										{ id: 'schulte', name: '舒尔特方格', icon: '🧩', role: 'child', path: '/pages/game/detail/schulte-detail' },
-										{ id: 'numhearing', name: '听音记数', icon: '🎧', role: 'child', path: '/pages/game/detail/numhearing-detail' },
-										{ id: 'jump-rope', name: '跳绳', icon: '🏃', role: 'child' },
-										{ id: 'reading', name: '阅读', icon: '📖', role: 'child' },
-										{ id: 'training-game', name: '训练游戏', icon: '🎮', role: 'child' },
-										{ id: 'meditation', name: '冥想游戏', icon: '🔤', role: 'child', path: '/pages/game/detail/meditation-detail' },
-										{ id: 'shape', name: '形状识别', icon: '⭐', role: 'child', path: '/pages/game/detail/shape-detail' },
-										{ id: 'memory', name: '记忆挑战', icon: '🧠', role: 'child', path: '/pages/game/detail/memory-detail' },
-										{ id: 'music', name: '音乐节奏', icon: '🎵', role: 'child', path: '/pages/game/detail/music-detail' },
-										{ id: 'love-letter', name: '亲子爱心信', icon: '💌', role: 'parent' },
-										{ id: 'merit-book', name: '功劳簿', icon: '📝', role: 'parent' }
-									]
-								}
-								
-								// 重新加载任务设置和今日任务
-								this.loadTaskSettings()
-								this.loadTodayTasks()
-							} else {
-								// 如果加载失败，使用默认数据
-								this.loadDefaultTasks()
-							}
-						})
+						this.allTasks = allTasksList
+						
+						// 如果API加载失败，使用默认数据作为后备
+						if (this.allTasks.length === 0) {
+							this.allTasks = [
+								{ id: 'schulte', item_name: '舒尔特方格', icon: '🧩', role: 'child', item_type: 1, path_url: '/pages/game/detail/schulte-detail' },
+								{ id: 'numhearing', item_name: '听音记数', icon: '🎧', role: 'child', item_type: 1, path_url: '/pages/game/detail/numhearing-detail' },
+								{ id: 'jump-rope', item_name: '跳绳', icon: '🏃', role: 'child', item_type: 1 },
+								{ id: 'reading', item_name: '阅读', icon: '📖', role: 'child', item_type: 1 },
+								{ id: 'training-game', item_name: '训练游戏', icon: '🎮', role: 'child', item_type: 1 },
+								{ id: 'meditation', item_name: '冥想游戏', icon: '🔤', role: 'child', item_type: 1, path_url: '/pages/game/detail/meditation-detail' },
+								{ id: 'shape', item_name: '形状识别', icon: '⭐', role: 'child', item_type: 1, path_url: '/pages/game/detail/shape-detail' },
+								{ id: 'memory', item_name: '记忆挑战', icon: '🧠', role: 'child', item_type: 1, path_url: '/pages/game/detail/memory-detail' },
+								{ id: 'music', item_name: '音乐节奏', icon: '🎵', role: 'child', item_type: 1, path_url: '/pages/game/detail/music-detail' },
+								{ id: 'love-letter', item_name: '亲子爱心信', icon: '💌', role: 'parent', item_type: 2, path_url: '/pages/mine/love-letter' },
+								{ id: 'merit-book', item_name: '功劳簿', icon: '📝', role: 'parent', item_type: 2 }
+							]
+						}
+						
+						// 重新加载任务设置和今日任务
+						this.loadTaskSettings()
+						this.loadTodayTasks()
 					} else {
 						// 如果加载失败，使用默认数据
 						this.loadDefaultTasks()
@@ -431,17 +451,17 @@
 			// 加载默认任务数据（作为后备）
 			loadDefaultTasks() {
 				this.allTasks = [
-					{ id: 'schulte', name: '舒尔特方格', icon: '🧩', role: 'child', path: '/pages/game/detail/schulte-detail' },
-					{ id: 'numhearing', name: '听音记数', icon: '🎧', role: 'child', path: '/pages/game/detail/numhearing-detail' },
-					{ id: 'jump-rope', name: '跳绳', icon: '🏃', role: 'child' },
-					{ id: 'reading', name: '阅读', icon: '📖', role: 'child' },
-					{ id: 'training-game', name: '训练游戏', icon: '🎮', role: 'child' },
-					{ id: 'meditation', name: '冥想游戏', icon: '🔤', role: 'child', path: '/pages/game/detail/meditation-detail' },
-					{ id: 'shape', name: '形状识别', icon: '⭐', role: 'child', path: '/pages/game/detail/shape-detail' },
-					{ id: 'memory', name: '记忆挑战', icon: '🧠', role: 'child', path: '/pages/game/detail/memory-detail' },
-					{ id: 'music', name: '音乐节奏', icon: '🎵', role: 'child', path: '/pages/game/detail/music-detail' },
-					{ id: 'love-letter', name: '亲子爱心信', icon: '💌', role: 'parent' },
-					{ id: 'merit-book', name: '功劳簿', icon: '📝', role: 'parent' }
+					{ id: 'schulte', item_name: '舒尔特方格', icon: '🧩', role: 'child', item_type: 1, path_url: '/pages/game/detail/schulte-detail' },
+					{ id: 'numhearing', item_name: '听音记数', icon: '🎧', role: 'child', item_type: 1, path_url: '/pages/game/detail/numhearing-detail' },
+					{ id: 'jump-rope', item_name: '跳绳', icon: '🏃', role: 'child', item_type: 1 },
+					{ id: 'reading', item_name: '阅读', icon: '📖', role: 'child', item_type: 1 },
+					{ id: 'training-game', item_name: '训练游戏', icon: '🎮', role: 'child', item_type: 1 },
+					{ id: 'meditation', item_name: '冥想游戏', icon: '🔤', role: 'child', item_type: 1, path_url: '/pages/game/detail/meditation-detail' },
+					{ id: 'shape', item_name: '形状识别', icon: '⭐', role: 'child', item_type: 1, path_url: '/pages/game/detail/shape-detail' },
+					{ id: 'memory', item_name: '记忆挑战', icon: '🧠', role: 'child', item_type: 1, path_url: '/pages/game/detail/memory-detail' },
+					{ id: 'music', item_name: '音乐节奏', icon: '🎵', role: 'child', item_type: 1, path_url: '/pages/game/detail/music-detail' },
+					{ id: 'love-letter', item_name: '亲子爱心信', icon: '💌', role: 'parent', item_type: 2, path_url: '/pages/mine/love-letter' },
+					{ id: 'merit-book', item_name: '功劳簿', icon: '📝', role: 'parent', item_type: 2 }
 				]
 			},
 			updateCalendar() {
@@ -526,6 +546,9 @@
 			showSettingsDialog() {
 				this.showSettings = true
 				this.settingsRole = this.currentRole
+				// 重新加载任务字典，确保数据是最新的
+				this.loadTodoItems()
+				// 加载已选中的任务设置
 				this.loadTaskSettings()
 			},
 			closeSettingsDialog() {
@@ -536,9 +559,15 @@
 				this.settingsRole = role
 				this.loadTaskSettings()
 			},
-			// 获取当前孩子ID（从本地存储）
+			// 获取当前孩子ID（从本地存储，与"我的"页面保持一致）
 			getCurrentChildId(): string | null {
 				try {
+					// 优先从 currentChildId 键获取（与 mine.uvue 中的 saveCurrentChild 保持一致）
+					const currentChildId = uni.getStorageSync('currentChildId')
+					if (currentChildId != null && currentChildId !== '') {
+						return currentChildId.toString()
+					}
+					// 如果 currentChildId 不存在，尝试从 currentChild 对象获取（向后兼容）
 					const currentChildStr = uni.getStorageSync('currentChild')
 					if (currentChildStr != null && currentChildStr !== '') {
 						const currentChild = JSON.parse(currentChildStr.toString())
@@ -563,12 +592,37 @@
 					status: 1 // 只获取有效的待办事项
 				}, (result) => {
 					if (result.success && result.data != null) {
-						// 提取已选中的item_id列表
+						// 提取已选中的item_id列表，并更新任务名称
 						const selectedIds: string[] = []
 						for (let i = 0; i < result.data.length; i++) {
 							const todo = result.data[i]
 							if (todo.item_id != null) {
-								selectedIds.push(todo.item_id.toString())
+								const itemIdStr = todo.item_id.toString()
+								selectedIds.push(itemIdStr)
+								
+								// 如果服务器返回了 item_name，更新 allTasks 中对应任务的名称
+								if (todo.item_name != null && todo.item_name !== '') {
+									const taskIndex = this.allTasks.findIndex(t => t.id === itemIdStr)
+									if (taskIndex >= 0) {
+										this.allTasks[taskIndex].item_name = todo.item_name
+										// 如果服务器返回了 item_type，也更新它
+										if (todo.item_type != null) {
+											this.allTasks[taskIndex].item_type = todo.item_type
+										}
+									} else {
+										// 如果任务不存在于 allTasks 中，添加它
+										// 根据 settingsRole 确定 item_type：child -> 1, parent -> 2
+										const itemType = this.settingsRole === 'child' ? 1 : 2
+										this.allTasks.push({
+											id: itemIdStr,
+											item_name: todo.item_name,
+											icon: '📋',
+											role: this.settingsRole,
+											item_type: todo.item_type != null ? todo.item_type : itemType,
+											path_url: undefined
+										})
+									}
+								}
 							}
 						}
 						this.selectedTaskIds = selectedIds
@@ -604,7 +658,27 @@
 			saveTaskSettings() {
 				const today = new Date()
 				const todoDate = this.formatDateKey(today.getFullYear(), today.getMonth() + 1, today.getDate())
-				const childId = this.settingsRole === 'child' ? this.getCurrentChildId() : null
+				// 获取当前孩子ID，确保类型正确
+				let childId: string | number | null = null
+				if (this.settingsRole === 'child') {
+					const childIdStr = this.getCurrentChildId()
+					if (childIdStr != null && childIdStr !== '') {
+						// 尝试转换为数字，如果失败则使用字符串
+						const childIdNum = Number(childIdStr)
+						childId = isNaN(childIdNum) ? childIdStr : childIdNum
+					} else {
+						// 如果 child_id 为空，提示用户先选择孩子
+						uni.showToast({
+							title: '请先在"我的"页面选择孩子',
+							icon: 'none',
+							duration: 2000
+						})
+						return
+					}
+				}
+				
+				// 调试日志
+				console.log('saveTaskSettings - settingsRole:', this.settingsRole, 'childId:', childId)
 				
 				// 先获取今日已有的待办事项，以便删除未选中的
 				getDailyTodos({
@@ -612,54 +686,75 @@
 					child_id: childId,
 					status: 1
 				}, (getResult) => {
-					// 构建要创建的待办事项列表
+					// 构建要创建的待办事项列表和要删除的待办事项列表
 					const todosToCreate: any[] = []
+					const todosToDelete: any[] = []
+					
+					// 获取已存在的待办事项
+					const existingTodos: any[] = getResult.success && getResult.data != null ? getResult.data : []
+					
+					// 1. 找出需要创建的待办事项（已选中但不存在）
 					for (let i = 0; i < this.selectedTaskIds.length; i++) {
 						const itemId = this.selectedTaskIds[i]
 						// 检查是否已存在
 						let exists = false
-						if (getResult.success && getResult.data != null) {
-							for (let j = 0; j < getResult.data.length; j++) {
-								if (getResult.data[j].item_id != null && getResult.data[j].item_id.toString() === itemId) {
-									exists = true
-									break
-								}
+						for (let j = 0; j < existingTodos.length; j++) {
+							if (existingTodos[j].item_id != null && existingTodos[j].item_id.toString() === itemId) {
+								exists = true
+								break
 							}
 						}
 						// 如果不存在，则添加到创建列表
 						if (!exists) {
+							// 确保 item_id 类型正确（可能是字符串或数字）
+							const itemIdValue: string | number = (() => {
+								const num = Number(itemId)
+								return isNaN(num) ? itemId : num
+							})()
+							
 							todosToCreate.push({
-								item_id: itemId,
+								item_id: itemIdValue,
 								todo_date: todoDate,
-								child_id: childId,
+								child_id: childId, // 确保 child_id 被正确传递
 								status: 1
+							})
+							
+							// 调试日志
+							console.log('创建待办事项:', {
+								item_id: itemIdValue,
+								todo_date: todoDate,
+								child_id: childId
 							})
 						}
 					}
 					
-					// 如果有新的事项需要创建，批量创建
-					if (todosToCreate.length > 0) {
-						batchCreateDailyTodo(todosToCreate, (createResult) => {
-							if (createResult.success) {
-								// 更新今日任务
-								this.loadTodayTasks()
-								
-								uni.showToast({
-									title: '设置成功',
-									icon: 'success'
-								})
-								
-								this.closeSettingsDialog()
-							} else {
-								uni.showToast({
-									title: createResult.message || '保存失败',
-									icon: 'none'
+					// 2. 找出需要删除的待办事项（已存在但未选中）
+					for (let i = 0; i < existingTodos.length; i++) {
+						const todo = existingTodos[i]
+						if (todo.item_id != null) {
+							const itemIdStr = todo.item_id.toString()
+							// 检查是否在选中列表中
+							const isSelected = this.selectedTaskIds.includes(itemIdStr)
+							if (!isSelected && todo.id != null) {
+								// 未选中，需要删除
+								todosToDelete.push(todo.id)
+								console.log('删除待办事项:', {
+									id: todo.id,
+									item_id: todo.item_id,
+									item_name: todo.item_name
 								})
 							}
-						})
-					} else {
-						// 如果没有新事项，直接更新
-						this.loadTodayTasks()
+						}
+					}
+					
+					// 3. 执行删除操作（先删除，再创建）
+					let deleteCount = 0
+					const totalOperations = todosToDelete.length + todosToCreate.length
+					
+					if (totalOperations === 0) {
+						// 没有变化，直接更新
+						this.loadTaskSettings() // 重新加载任务设置
+						this.loadTodayTasks() // 更新今日任务
 						
 						uni.showToast({
 							title: '设置成功',
@@ -667,14 +762,97 @@
 						})
 						
 						this.closeSettingsDialog()
+						
+						// 同时保存到本地存储（作为后备）
+						try {
+							const key = `taskSettings_${this.settingsRole}`
+							uni.setStorageSync(key, JSON.stringify(this.selectedTaskIds))
+						} catch (e) {
+							// 忽略本地存储错误
+						}
+						return
 					}
 					
-					// 同时保存到本地存储（作为后备）
-					try {
-						const key = `taskSettings_${this.settingsRole}`
-						uni.setStorageSync(key, JSON.stringify(this.selectedTaskIds))
-					} catch (e) {
-						// 忽略本地存储错误
+					// 删除未选中的待办事项
+					const deleteNext = () => {
+						if (deleteCount < todosToDelete.length) {
+							const todoId = todosToDelete[deleteCount]
+							deleteDailyTodo(todoId, (deleteResult) => {
+								deleteCount++
+								if (deleteResult.success) {
+									// 继续删除下一个
+									deleteNext()
+								} else {
+									console.error('删除待办事项失败:', deleteResult.message)
+									// 即使删除失败，也继续处理
+									deleteNext()
+								}
+							})
+						} else {
+							// 所有删除完成，开始创建
+							createNext()
+						}
+					}
+					
+					// 创建新的待办事项
+					const createNext = () => {
+						if (todosToCreate.length > 0) {
+							// 批量创建所有待创建的事项
+							batchCreateDailyTodo(todosToCreate, (createResult) => {
+								if (createResult.success) {
+									// 所有操作完成，更新数据
+									this.loadTaskSettings() // 重新加载任务设置，更新选中状态
+									this.loadTodayTasks() // 更新今日任务
+									
+									uni.showToast({
+										title: '设置成功',
+										icon: 'success'
+									})
+									
+									this.closeSettingsDialog()
+									
+									// 同时保存到本地存储（作为后备）
+									try {
+										const key = `taskSettings_${this.settingsRole}`
+										uni.setStorageSync(key, JSON.stringify(this.selectedTaskIds))
+									} catch (e) {
+										// 忽略本地存储错误
+									}
+								} else {
+									uni.showToast({
+										title: createResult.message || '保存失败',
+										icon: 'none'
+									})
+								}
+							})
+						} else {
+							// 没有需要创建的，直接更新
+							this.loadTaskSettings() // 重新加载任务设置
+							this.loadTodayTasks() // 更新今日任务
+							
+							uni.showToast({
+								title: '设置成功',
+								icon: 'success'
+							})
+							
+							this.closeSettingsDialog()
+							
+							// 同时保存到本地存储（作为后备）
+							try {
+								const key = `taskSettings_${this.settingsRole}`
+								uni.setStorageSync(key, JSON.stringify(this.selectedTaskIds))
+							} catch (e) {
+								// 忽略本地存储错误
+							}
+						}
+					}
+					
+					// 开始执行删除操作
+					if (todosToDelete.length > 0) {
+						deleteNext()
+					} else {
+						// 没有需要删除的，直接创建
+						createNext()
 					}
 				})
 			},
@@ -691,15 +869,23 @@
 				}, (childResult) => {
 					const childTasks: DailyTask[] = []
 					if (childResult.success && childResult.data != null) {
+						this.todayDailyTodos.child = childResult.data
 						for (let i = 0; i < childResult.data.length; i++) {
 							const todo = childResult.data[i]
 							if (todo.item_id != null) {
 								childTasks.push({
 									taskId: todo.item_id.toString(),
-									completed: todo.completed === true
+									completed: todo.completed === true || (todo as any).is_completed === true || (todo as any).is_completed === 1,
+									progress_count: todo.progress_count,
+									progress_duration_minutes: todo.progress_duration_minutes,
+									completion_type: todo.completion_type,
+									completion_target: todo.completion_target,
+									completion_unit: todo.completion_unit
 								})
 							}
 						}
+					} else {
+						this.todayDailyTodos.child = []
 					}
 					this.todayTasks.childTasks = childTasks
 					
@@ -711,15 +897,23 @@
 					}, (parentResult) => {
 						const parentTasks: DailyTask[] = []
 						if (parentResult.success && parentResult.data != null) {
+							this.todayDailyTodos.parent = parentResult.data
 							for (let i = 0; i < parentResult.data.length; i++) {
 								const todo = parentResult.data[i]
 								if (todo.item_id != null) {
 									parentTasks.push({
 										taskId: todo.item_id.toString(),
-										completed: todo.completed === true
+										completed: todo.completed === true || (todo as any).is_completed === true || (todo as any).is_completed === 1,
+										progress_count: todo.progress_count,
+										progress_duration_minutes: todo.progress_duration_minutes,
+										completion_type: todo.completion_type,
+										completion_target: todo.completion_target,
+										completion_unit: todo.completion_unit
 									})
 								}
 							}
+						} else {
+							this.todayDailyTodos.parent = []
 						}
 						this.todayTasks.parentTasks = parentTasks
 						
@@ -740,6 +934,31 @@
 				}
 				return []
 			},
+			/** 已开始未完成时显示进度文案，如 "3/5 次"、"20/30 分钟"，无进度返回空字符串 */
+			formatTaskProgress(task: TaskItemWithCompleted): string {
+				if (task.completed) return ''
+				const type = task.completion_type != null ? task.completion_type : 1
+				if (type === 2 && task.completion_target != null && task.completion_target > 0) {
+					const n = task.progress_count != null ? task.progress_count : 0
+					return `${n}/${task.completion_target} 次`
+				}
+				if (type === 3 && task.completion_target != null && task.completion_target > 0) {
+					const n = task.progress_duration_minutes != null ? task.progress_duration_minutes : 0
+					const unit = task.completion_unit === 'second' ? '秒' : '分钟'
+					return `${n}/${task.completion_target} ${unit}`
+				}
+				// type 1 或 无 target：有打卡进度也显示（如 progress_count > 0）
+				if ((task.progress_count != null && task.progress_count > 0) || (task.progress_duration_minutes != null && task.progress_duration_minutes > 0)) {
+					if (task.progress_count != null && task.progress_count > 0 && task.completion_target != null) return `${task.progress_count}/${task.completion_target} 次`
+					if (task.progress_duration_minutes != null && task.progress_duration_minutes > 0 && task.completion_target != null) {
+						const u = task.completion_unit === 'second' ? '秒' : '分钟'
+						return `${task.progress_duration_minutes}/${task.completion_target} ${u}`
+					}
+					if (task.progress_count != null && task.progress_count > 0) return `${task.progress_count} 次`
+					if (task.progress_duration_minutes != null && task.progress_duration_minutes > 0) return `${task.progress_duration_minutes} 分钟`
+				}
+				return ''
+			},
 			goToCompleteTask(task: TaskItemWithCompleted) {
 				// 保存当前任务ID，用于返回时标记完成
 				try {
@@ -749,9 +968,25 @@
 					// 忽略错误
 				}
 				
-				if (task.path != null && task.path !== '') {
+				if (task.path_url != null && task.path_url !== '') {
+					let url = task.path_url
+					// 亲子爱心信：从事项进入需传 from=task&todoId&id，以便只读+已读按钮
+					if (task.path_url.indexOf('love-letter') >= 0) {
+						const list = this.currentRole === 'child' ? this.todayDailyTodos.child : this.todayDailyTodos.parent
+						let todoId = ''
+						for (let i = 0; i < list.length; i++) {
+							const todo = list[i]
+							if (todo.item_id != null && todo.item_id.toString() === task.id) {
+								if (todo.id != null) todoId = todo.id.toString()
+								break
+							}
+						}
+						const childId = this.getCurrentChildId() || ''
+						const sep = task.path_url.indexOf('?') >= 0 ? '&' : '?'
+						url = task.path_url + sep + 'from=task&todoId=' + encodeURIComponent(todoId) + '&id=' + encodeURIComponent(childId)
+					}
 					uni.navigateTo({
-						url: task.path
+						url: url
 					})
 				} else {
 					uni.showToast({
@@ -1214,16 +1449,18 @@
 		border-radius: 12px;
 		padding: 15px;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+		overflow: visible;
 	}
 
 	.task-item {
 		flex-direction: row;
 		align-items: center;
 		justify-content: space-between;
-		padding: 15px 0;
+		padding: 15px 14px 15px 0;
 		border-bottom-width: 1px;
 		border-bottom-color: #F0F0F0;
 		border-bottom-style: solid;
+		overflow: visible;
 	}
 
 	.task-item:last-child {
@@ -1236,19 +1473,26 @@
 		flex: 1;
 	}
 
-	.task-completed {
-		width: 24px;
-		height: 24px;
-		background-color: #4CAF50;
-		border-radius: 12px;
+	/* 已完成：印章样式，同色内框+外框 */
+	.task-completed-stamp {
+		padding: 5px 10px;
+		min-width: 72px;
 		align-items: center;
 		justify-content: center;
+		background-color: transparent;
+		border-width: 2px;
+		border-color: #c41e3a;
+		border-radius: 4px;
+		transform: rotate(-10deg);
+		box-shadow: 0 0 0 2px #c41e3a;
+		flex-shrink: 0;
 	}
 
-	.check-icon {
-		font-size: 16px;
-		color: #FFFFFF;
+	.stamp-text {
+		font-size: 14px;
+		color: #c41e3a;
 		font-weight: bold;
+		letter-spacing: 1px;
 	}
 
 	.task-action {
@@ -1260,6 +1504,21 @@
 	.task-action:active {
 		background-color: #45A049;
 		opacity: 0.8;
+	}
+
+	.task-action-small {
+		padding: 4px 10px;
+		margin-left: 8px;
+	}
+
+	.task-progress-wrap {
+		flex-direction: row;
+		align-items: center;
+	}
+
+	.task-progress-text {
+		font-size: 13px;
+		color: #666666;
 	}
 
 	.complete-button {

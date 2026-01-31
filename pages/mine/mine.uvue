@@ -51,6 +51,10 @@
 		</view>
 		<view class="content">
 			<view class="menu-list">
+				<view class="menu-item" @click="handleMenuClick('写给宝贝的信')">
+					<text class="menu-icon">✉️</text>
+					<text class="menu-text">写给宝贝的信</text>
+				</view>
 				<view class="menu-item" @click="handleMenuClick('档案')">
 					<text class="menu-icon">📁</text>
 					<text class="menu-text">档案</text>
@@ -320,6 +324,11 @@
 							title: '档案功能开发中',
 							icon: 'none',
 							duration: 2000
+						})
+						break
+					case '写给宝贝的信':
+						uni.navigateTo({
+							url: '/pages/mine/love-letter'
 						})
 						break
 					case '工具':

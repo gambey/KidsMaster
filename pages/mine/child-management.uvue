@@ -21,6 +21,9 @@
 						<text class="child-item-name">{{ child.child_name || child.nickname || '未命名' }}</text>
 					</view>
 					<view class="action-buttons">
+						<view class="letter-button" @click="goToLoveLetter(child)">
+							<text class="letter-button-text">信</text>
+						</view>
 						<view class="edit-button" @click="editChild(child)">
 							<text class="edit-button-text">编辑</text>
 						</view>
@@ -120,6 +123,12 @@
 			editChild(child: ChildInfo) {
 				uni.navigateTo({
 					url: `/pages/mine/edit-child?id=${child.id}`
+				})
+			},
+			goToLoveLetter(child: ChildInfo) {
+				if (child.id == null) return
+				uni.navigateTo({
+					url: `/pages/mine/love-letter?id=${child.id}`
 				})
 			},
 			goToAddChild() {
@@ -228,13 +237,19 @@
 	.content {
 		flex: 1;
 		padding: 20px;
+		width: 100%;
+		box-sizing: border-box;
 	}
 	
 	.children-list {
+		width: 100%;
 		margin-bottom: 20px;
+		box-sizing: border-box;
 	}
 	
 	.child-item {
+		width: 100%;
+		box-sizing: border-box;
 		flex-direction: row;
 		align-items: center;
 		justify-content: space-between;
@@ -278,6 +293,22 @@
 		gap: 8px;
 	}
 	
+	.letter-button {
+		padding: 8px 14px;
+		background-color: #E8D5C4;
+		border-radius: 8px;
+	}
+	
+	.letter-button:active {
+		opacity: 0.8;
+	}
+	
+	.letter-button-text {
+		font-size: 14px;
+		color: #6b5344;
+		font-weight: bold;
+	}
+	
 	.edit-button {
 		padding: 8px 16px;
 		background-color: #F368E0;
@@ -312,6 +343,7 @@
 	
 	.add-child-button {
 		width: 100%;
+		box-sizing: border-box;
 		height: 50px;
 		background-color: #FFFFFF;
 		border-radius: 25px;

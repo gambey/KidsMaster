@@ -1,0 +1,281 @@
+<template>
+	<view class="container">
+		<view class="header">
+			<view class="back-button" @click="goBack">
+				<text class="back-icon">←</text>
+			</view>
+			<text class="title">写给宝贝的信</text>
+		</view>
+
+		<scroll-view class="letter-scroll" scroll-y :show-scrollbar="true">
+			<view class="letter-wrapper">
+				<view class="letter-paper">
+					<text class="letter-title">{{ letterTitle }}</text>
+					<!-- 从事项进入：只读 -->
+					<text v-if="fromTask" class="letter-body">{{ letterBody }}</text>
+					<!-- 从子女管理/我的进入：可编辑 -->
+					<textarea
+						v-else
+						class="letter-body-editable"
+						v-model="letterBody"
+						placeholder="信件内容从服务端加载，可在此编辑后保存"
+						:auto-height="false"
+					/>
+					<text class="letter-end">宝贝，感谢你～！</text>
+					<!-- 从事项进入：已读按钮（有 todoId 时才显示） -->
+					<view v-if="fromTask && todoId" class="action-row">
+						<view class="btn-read" @click="markAsRead">
+							<text class="btn-read-text">已读</text>
+						</view>
+					</view>
+					<!-- 从子女管理进入：保存按钮 -->
+					<view v-else class="action-row">
+						<view class="btn-save" @click="saveLetter">
+							<text class="btn-save-text">保存</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		</scroll-view>
+	</view>
+</template>
+
+<script lang="uts">
+	import { getChildDetail, updateChildLetter, getChildrenList, completeDailyTodo } from '../../utils/api.uts'
+
+	export default {
+		data() {
+			return {
+				childId: '' as string,
+				todoId: '' as string,
+				fromTask: false as boolean,
+				letterTitle: '给我的宝贝——宝贝' as string,
+				letterBody: '' as string,
+				loading: true as boolean
+			}
+		},
+		onLoad(options: any) {
+			if (options != null) {
+				if (options.id != null) this.childId = options.id.toString()
+				if (options.from === 'task' && options.todoId != null) {
+					this.fromTask = true
+					this.todoId = options.todoId.toString()
+				}
+			}
+			if (this.childId === '' && !this.fromTask) {
+				const currentId = uni.getStorageSync('currentChildId')
+				if (currentId != null && currentId !== '') this.childId = currentId.toString()
+			}
+			this.loadLetter()
+		},
+		methods: {
+			goBack() {
+				uni.navigateBack()
+			},
+			loadLetter() {
+				if (this.childId === '') {
+					this.letterTitle = '给我的宝贝——宝贝'
+					this.letterBody = '请先在「我的」选择孩子，或从子女管理进入。'
+					this.loading = false
+					return
+				}
+				this.loading = true
+				getChildDetail(this.childId, (result) => {
+					this.loading = false
+					if (result.success && result.data != null) {
+						const c = result.data
+						const name = c.child_name != null && c.child_name !== '' ? c.child_name : '宝贝'
+						this.letterTitle = `给我的宝贝——${name}`
+						this.letterBody = (c.parent_letter != null && c.parent_letter !== '') ? c.parent_letter : ''
+					} else {
+						// 降级：从列表取
+						getChildrenList((listResult) => {
+							if (listResult.success && listResult.data != null) {
+								const list = listResult.data as any[]
+								for (let i = 0; i < list.length; i++) {
+									const item = list[i]
+									if (item.id != null && item.id.toString() === this.childId) {
+										const name = item.child_name != null && item.child_name !== '' ? item.child_name : '宝贝'
+										this.letterTitle = `给我的宝贝——${name}`
+										this.letterBody = (item.parent_letter != null && item.parent_letter !== '') ? item.parent_letter : ''
+										break
+									}
+								}
+							}
+							if (this.letterBody === '' && this.letterTitle === '给我的宝贝——宝贝') {
+								this.letterBody = '加载失败，请稍后重试。'
+							}
+						})
+					}
+				})
+			},
+			saveLetter() {
+				if (this.childId === '') {
+					uni.showToast({ title: '无法保存：未选择孩子', icon: 'none' })
+					return
+				}
+				uni.showLoading({ title: '保存中...' })
+				updateChildLetter(this.childId, this.letterBody, (result) => {
+					uni.hideLoading()
+					if (result.success) {
+						uni.showToast({ title: '保存成功', icon: 'success' })
+						if (result.data != null && result.data.parent_letter != null) {
+							this.letterBody = result.data.parent_letter
+						}
+					} else {
+						uni.showToast({ title: result.message || '保存失败', icon: 'none' })
+					}
+				})
+			},
+			markAsRead() {
+				if (this.todoId === '') {
+					uni.showToast({ title: '无法标记事项', icon: 'none' })
+					return
+				}
+				uni.showLoading({ title: '标记中...' })
+				completeDailyTodo(this.todoId, (result) => {
+					uni.hideLoading()
+					if (result.success) {
+						uni.showToast({ title: '已标记完成', icon: 'success' })
+						// 可选：返回上一页
+						setTimeout(() => {
+							uni.navigateBack()
+						}, 800)
+					} else {
+						uni.showToast({ title: result.message || '标记失败', icon: 'none' })
+					}
+				})
+			}
+		}
+	}
+</script>
+
+<style scoped>
+	.container {
+		flex: 1;
+		background-color: #f5f0e8;
+		min-height: 100vh;
+	}
+
+	.header {
+		flex-direction: row;
+		align-items: center;
+		padding: 20px;
+		padding-top: 50px;
+		background-color: rgba(245, 240, 232, 0.95);
+		border-bottom-width: 1px;
+		border-bottom-color: #e8e0d4;
+	}
+
+	.back-button {
+		width: 40px;
+		height: 40px;
+		align-items: center;
+		justify-content: center;
+		margin-right: 12px;
+	}
+
+	.back-icon {
+		font-size: 24px;
+		color: #8b7355;
+	}
+
+	.title {
+		font-size: 18px;
+		color: #6b5344;
+		font-weight: 500;
+	}
+
+	.letter-scroll {
+		flex: 1;
+		height: 0;
+	}
+
+	.letter-wrapper {
+		padding: 24px 20px 40px;
+		align-items: center;
+	}
+
+	.letter-paper {
+		width: 100%;
+		max-width: 600px;
+		background-color: #fdfbf7;
+		border-radius: 4px;
+		padding: 32px 28px 40px;
+		border-width: 1px;
+		border-color: #e8e0d4;
+		box-shadow: 0 2px 12px rgba(139, 115, 85, 0.08);
+	}
+
+	.letter-title {
+		font-size: 20px;
+		color: #5c4a3a;
+		margin-bottom: 20px;
+		font-family: "STKaiti", "KaiTi", "华文行楷", "Xingkai SC", serif;
+		font-weight: 500;
+	}
+
+	.letter-body {
+		font-size: 16px;
+		line-height: 28px;
+		color: #6b5b4f;
+		font-family: "STKaiti", "KaiTi", "华文行楷", "Xingkai SC", serif;
+		white-space: pre-line;
+	}
+
+	.letter-body-editable {
+		font-size: 16px;
+		line-height: 28px;
+		color: #6b5b4f;
+		font-family: "STKaiti", "KaiTi", "华文行楷", "Xingkai SC", serif;
+		width: 100%;
+		min-height: 320px;
+		box-sizing: border-box;
+	}
+
+	.letter-end {
+		display: block;
+		margin-top: 24px;
+		font-size: 17px;
+		color: #5c4a3a;
+		font-family: "STKaiti", "KaiTi", "华文行楷", "Xingkai SC", serif;
+	}
+
+	.action-row {
+		margin-top: 28px;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.btn-read {
+		padding: 12px 32px;
+		background-color: #c9b896;
+		border-radius: 24px;
+	}
+
+	.btn-read:active {
+		opacity: 0.85;
+	}
+
+	.btn-read-text {
+		font-size: 16px;
+		color: #5c4a3a;
+		font-weight: 500;
+	}
+
+	.btn-save {
+		padding: 12px 32px;
+		background-color: #8b7355;
+		border-radius: 24px;
+	}
+
+	.btn-save:active {
+		opacity: 0.85;
+	}
+
+	.btn-save-text {
+		font-size: 16px;
+		color: #fdfbf7;
+		font-weight: 500;
+	}
+</style>

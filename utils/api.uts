@@ -171,27 +171,32 @@ function getAuthToken(): string {
  */
 type TodoItemDict = {
 	id: string | number
-	name?: string // 事项名称（可选，因为API可能不返回）
+	name?: string // 事项名称（兼容旧字段名）
+	item_name?: string // 事项名称（新字段名，优先使用）
+	item_type?: number // 类型 1 = 孩子，2 = 家长
 	icon?: string // 事项图标
 	role: string // 事项角色：'child' | 'parent'
 	description?: string // 事项描述
-	path?: string // 跳转路径（可选）
+	path_url?: string // 跳转路径（可选）
 	category?: string // 事项分类（可选）
 }
 
 /**
  * 获取事项字典列表
- * @param {string} role 可选，筛选角色：'child' | 'parent'，不传则返回所有
+ * @param {string} role 可选，筛选角色：'child' | 'parent'，不传则返回所有。对应后端 item_type：child=1，parent=2
  * @param {Function} callback 回调函数，参数为结果对象 {success: boolean, data: TodoItemDict[], message: string}
- * @description 调用 GET /todo-items 接口获取事项字典列表，用于家长和孩子的事项设置
+ * @description 调用 GET /todo-items 接口获取事项字典列表，后端使用 item_type 筛选（1=孩子，2=家长）
  */
 export function getTodoItems(role: string | null, callback: (result: { success: boolean, data: TodoItemDict[], message: string }) => void) {
 	const token = getAuthToken()
 	
-	// 构建查询参数
+	// 后端使用 item_type：1=孩子(child)，2=家长(parent)
 	let queryString = ''
 	if (role != null && role !== '') {
-		queryString = `?role=${encodeURIComponent(role)}`
+		const itemType = role === 'child' ? '1' : (role === 'parent' ? '2' : '')
+		if (itemType !== '') {
+			queryString = `?item_type=${itemType}`
+		}
 	}
 	
 	const requestUrl = `${BASE_URL}/todo-items${queryString}`
@@ -285,9 +290,23 @@ type DailyTodo = {
 	is_mandatory?: number // 是否必做事项：1=是，0=否，默认0
 	remark?: string | null // 待办备注
 	status?: number // 待办状态：1=有效(已选取)，0=取消(当日作废)，默认1
-	completed?: boolean // 是否完成（用于标记完成状态）
+	completed?: boolean // 是否完成（与 is_completed 二选一，打卡记录）
+	is_completed?: boolean | number // 服务端返回 0/1（数字）或 true/false
 	create_time?: string // 待办创建时间
 	update_time?: string // 待办更新时间
+	// 打卡进度（GET /daily-todos 每条记录附带）
+	checkin_time?: string | null // 打卡时间
+	progress_count?: number | null // 当前累计完成次数，completion_type=2 时使用
+	progress_duration_minutes?: number | null // 当前累计时长（分钟），completion_type=3 时使用
+	completion_type?: number | null // 1=一次即完成，2=按次数，3=按时长（来自事项字典）
+	completion_target?: number | null // 目标值（次数或时长）
+	completion_unit?: string | null // 仅类型3：'minute' | 'second'
+	// 服务器返回时可能包含的关联字段（JOIN查询结果）
+	item_name?: string // 事项名称（从 todo_item_dict 关联查询）
+	item_type?: number // 事项类型（从 todo_item_dict 关联查询）
+	path_url?:string //前端跳转路径（从 todo_item_dict 关联查询）
+	item_category?: string | null // 事项分类（从 todo_item_dict 关联查询）
+	child_name?: string | null // 孩子名称（从 children 关联查询）
 }
 
 /**
@@ -463,13 +482,14 @@ export function createDailyTodo(params: UpsertDailyTodoParams | UpsertDailyTodoP
 			let msg = '创建成功'
 			
 			if (res != null && (res.statusCode === 200 || res.statusCode === 201)) {
-				const data: ApiResponse<DailyTodo | DailyTodo[]> = res.data as ApiResponse<DailyTodo | DailyTodo[]>
+				const data = res.data as ApiResponse<DailyTodo | DailyTodo[] | { inserted_count?: number, skipped_count?: number, error_count?: number, errors?: any[] }>
 				if (data != null) {
 					// 检查code字段
 					if (data.code != null) {
 						if (data.code === 0 || data.code === 200 || data.code === 201) {
 							ok = true
-							if (data.data != null) {
+							// 后端 POST /daily-todos 返回 data 为 { inserted_count, skipped_count, error_count, errors }，不是 DailyTodo[]
+							if (data.data != null && typeof (data.data as any).inserted_count !== 'number') {
 								todoData = data.data as DailyTodo | DailyTodo[]
 							}
 							if (data.msg != null) {
@@ -488,10 +508,15 @@ export function createDailyTodo(params: UpsertDailyTodoParams | UpsertDailyTodoP
 							}
 						}
 					} else {
-						// 没有code字段，直接使用data
+						// 没有code字段：后端直接返回 { message, data }，data 可能为数组或 { inserted_count, ... }
 						ok = true
-						if (data.data != null) {
+						if (data.data != null && typeof (data.data as any).inserted_count !== 'number') {
 							todoData = data.data as DailyTodo | DailyTodo[]
+						}
+						if (data.msg != null) {
+							msg = data.msg.toString()
+						} else if (data.message != null) {
+							msg = data.message.toString()
 						}
 					}
 				} else {
@@ -525,11 +550,11 @@ export function createDailyTodo(params: UpsertDailyTodoParams | UpsertDailyTodoP
 }
 
 /**
- * 更新每日待办事项（包括完成状态）
+ * 更新每日待办事项（备注、必做、状态等；完成状态请用 completeDailyTodo/uncompleteDailyTodo）
  * @param {string | number} todoId 待办事项ID
- * @param {any} updateData 更新数据对象，可包含：completed, status, remark, is_mandatory 等字段
+ * @param {any} updateData 更新数据对象，可包含：status, remark, is_mandatory。完成状态请调用 completeDailyTodo/uncompleteDailyTodo（走打卡接口）
  * @param {Function} callback 回调函数，参数为结果对象 {success: boolean, data: DailyTodo | null, message: string}
- * @description 调用 PUT /daily-todos/:id 接口更新指定的每日待办事项，主要用于标记完成状态
+ * @description 调用 PUT /daily-todos/:id，后端仅支持 is_mandatory、remark、status
  */
 export function updateDailyTodo(todoId: string | number, updateData: any, callback: (result: { success: boolean, data: DailyTodo | null, message: string }) => void) {
 	const requestUrl = `${BASE_URL}/daily-todos/${todoId}`
@@ -614,23 +639,84 @@ export function updateDailyTodo(todoId: string | number, updateData: any, callba
 }
 
 /**
- * 标记每日待办事项为完成
- * @param {string | number} todoId 待办事项ID
+ * 标记每日待办事项为完成（通过打卡接口）
+ * @param {string | number} todoId 每日待办 ID（daily_todo_id）
  * @param {Function} callback 回调函数，参数为结果对象 {success: boolean, data: DailyTodo | null, message: string}
- * @description 调用 PUT /daily-todos/:id 接口标记待办事项为完成状态（设置 completed=true）
+ * @description 后端完成状态在打卡表：调用 PUT /checkin/:daily_todo_id，body { is_completed: 1 }
  */
 export function completeDailyTodo(todoId: string | number, callback: (result: { success: boolean, data: DailyTodo | null, message: string }) => void) {
-	updateDailyTodo(todoId, { completed: true }, callback)
+	updateCheckin(todoId, { is_completed: 1 }, (res) => {
+		callback({ success: res.success, data: null, message: res.message })
+	})
 }
 
 /**
- * 取消完成每日待办事项
- * @param {string | number} todoId 待办事项ID
+ * 取消完成每日待办事项（通过打卡接口）
+ * @param {string | number} todoId 每日待办 ID（daily_todo_id）
  * @param {Function} callback 回调函数，参数为结果对象 {success: boolean, data: DailyTodo | null, message: string}
- * @description 调用 PUT /daily-todos/:id 接口取消待办事项的完成状态（设置 completed=false）
+ * @description 后端完成状态在打卡表：调用 PUT /checkin/:daily_todo_id，body { is_completed: 0 }
  */
 export function uncompleteDailyTodo(todoId: string | number, callback: (result: { success: boolean, data: DailyTodo | null, message: string }) => void) {
-	updateDailyTodo(todoId, { completed: false }, callback)
+	updateCheckin(todoId, { is_completed: 0 }, (res) => {
+		callback({ success: res.success, data: null, message: res.message })
+	})
+}
+
+// ==================== 打卡相关 API (checkin) ====================
+
+/**
+ * 更新打卡记录（完成状态、进度等）
+ * @param {string | number} dailyTodoId 每日待办 ID
+ * @param {object} params 请求体：is_completed（必填 0|1）、可选 checkin_remark、progress_count、progress_duration_minutes
+ * @param {Function} callback 回调函数
+ * @description 调用 PUT /checkin/:daily_todo_id，后端完成状态存于 todo_checkin_record 表
+ */
+export function updateCheckin(dailyTodoId: string | number, params: { is_completed: 0 | 1, checkin_remark?: string, progress_count?: number, progress_duration_minutes?: number }, callback: (result: { success: boolean, message: string }) => void) {
+	const requestUrl = `${BASE_URL}/checkin/${dailyTodoId}`
+	const token = getAuthToken()
+	
+	uni.request({
+		url: requestUrl,
+		method: 'PUT',
+		timeout: 10000,
+		header: {
+			'Content-Type': 'application/json',
+			'Authorization': token != '' ? `Bearer ${token}` : ''
+		},
+		data: {
+			is_completed: params.is_completed,
+			checkin_remark: params.checkin_remark,
+			progress_count: params.progress_count,
+			progress_duration_minutes: params.progress_duration_minutes
+		},
+		success: (res: any) => {
+			let ok = false
+			let msg = '更新成功'
+			if (res != null && res.statusCode === 200) {
+				const data = res.data as { message?: string }
+				if (data != null && data.message != null) {
+					msg = data.message.toString()
+				}
+				ok = true
+			} else if (res != null && res.statusCode === 401) {
+				msg = '未授权，请重新登录'
+			} else if (res != null && res.statusCode === 404) {
+				msg = '待办不存在或已失效'
+			} else if (res != null && res.statusCode === 400) {
+				const body = res.data as { message?: string }
+				msg = (body != null && body.message != null) ? body.message : '参数错误'
+			} else if (res != null && res.statusCode != null) {
+				msg = `请求失败，状态码 ${res.statusCode}`
+			} else {
+				msg = '请求失败，请检查网络连接'
+			}
+			callback({ success: ok, message: msg })
+		},
+		fail: (err: any) => {
+			console.error('updateCheckin request fail:', err)
+			callback({ success: false, message: '网络异常，请稍后重试' })
+		}
+	})
 }
 
 /**
@@ -734,11 +820,27 @@ export function batchCreateDailyTodo(todoList: UpsertDailyTodoParams[], callback
 	const todos: any[] = []
 	for (let i = 0; i < todoList.length; i++) {
 		const params = todoList[i]
+		// 确保 child_id 正确传递
+		// 注意：对于孩子事项，child_id 不能为空；对于家长事项，child_id 应该为 null
+		const childId = (params.child_id != null && params.child_id !== '') ? params.child_id : null
+		
+		// 验证：如果 child_id 为空，可能是孩子事项缺少 child_id，记录警告
+		if (childId == null) {
+			console.warn('batchCreateDailyTodo - child_id 为空，这可能是家长事项，或者孩子事项缺少 child_id')
+		}
+		
 		todos.push({
 			item_id: params.item_id,
-			child_id: params.child_id != null ? params.child_id : null,
+			child_id: childId,
 			is_mandatory: params.is_mandatory != null ? params.is_mandatory : 0,
 			remark: params.remark != null ? params.remark : null
+		})
+		
+		// 调试日志
+		console.log('batchCreateDailyTodo - 构建待办事项:', {
+			item_id: params.item_id,
+			child_id: childId,
+			todo_date: todoDate
 		})
 	}
 	
@@ -760,14 +862,17 @@ export function batchCreateDailyTodo(todoList: UpsertDailyTodoParams[], callback
 			let msg = '批量创建成功'
 			
 			if (res != null && (res.statusCode === 200 || res.statusCode === 201)) {
-				const data: ApiResponse<DailyTodo[]> = res.data as ApiResponse<DailyTodo[]>
+				const data = res.data as ApiResponse<DailyTodo[] | { inserted_count?: number, skipped_count?: number, error_count?: number, errors?: any[] }>
 				if (data != null) {
 					// 检查code字段
 					if (data.code != null) {
 						if (data.code === 0 || data.code === 200 || data.code === 201) {
 							ok = true
+							// 后端返回 data 为 { inserted_count, skipped_count, error_count, errors }，不是 DailyTodo[]
 							if (data.data != null && Array.isArray(data.data)) {
 								todoDataList = data.data as DailyTodo[]
+							} else if (data.data != null && typeof (data.data as any).inserted_count === 'number') {
+								todoDataList = []
 							}
 							if (data.msg != null) {
 								msg = data.msg.toString()
@@ -785,10 +890,17 @@ export function batchCreateDailyTodo(todoList: UpsertDailyTodoParams[], callback
 							}
 						}
 					} else {
-						// 没有code字段，直接使用data
+						// 没有code字段：后端直接返回 { message, data: { inserted_count, ... } }
 						ok = true
 						if (data.data != null && Array.isArray(data.data)) {
 							todoDataList = data.data as DailyTodo[]
+						} else if (data.data != null && typeof (data.data as any).inserted_count === 'number') {
+							todoDataList = []
+						}
+						if (data.msg != null) {
+							msg = data.msg.toString()
+						} else if (data.message != null) {
+							msg = data.message.toString()
 						}
 					}
 				} else {
@@ -835,6 +947,7 @@ type ChildInfo = {
 	avatar?: string // 头像 URL
 	remark?: string // 家长备注
 	relation_type?: number // 关系类型：1=父亲，2=母亲，3=祖父母，4=其他
+	parent_letter?: string // 家长写给孩子的信件内容（服务端返回时已替换 [childName]、[gender]）
 }
 
 /**
@@ -1052,6 +1165,110 @@ export function getChildrenList(callback: (result: { success: boolean, data: Chi
 				data: [],
 				message: '网络异常，请稍后重试'
 			})
+		}
+	})
+}
+
+/**
+ * 获取单个孩子详情（含家长信件 parent_letter，占位符已替换）
+ * @param {string | number} childId 孩子ID
+ * @param {Function} callback 回调函数，参数为结果对象 {success: boolean, data: ChildInfo | null, message: string}
+ * @description 调用 GET /children/:id 接口
+ */
+export function getChildDetail(childId: string | number, callback: (result: { success: boolean, data: ChildInfo | null, message: string }) => void) {
+	const requestUrl = `${BASE_URL}/children/${childId}`
+	const token = getAuthToken()
+
+	uni.request({
+		url: requestUrl,
+		method: 'GET',
+		timeout: 10000,
+		header: {
+			'Content-Type': 'application/json',
+			'Authorization': token != '' ? `Bearer ${token}` : ''
+		},
+		success: (res: any) => {
+			let ok = false
+			let childData: ChildInfo | null = null
+			let msg = '获取成功'
+
+			if (res != null && res.statusCode === 200) {
+				const data: ApiResponse<ChildInfo> = res.data as ApiResponse<ChildInfo>
+				if (data != null && data.data != null) {
+					ok = true
+					childData = data.data as ChildInfo
+					if (data.msg != null) msg = data.msg.toString()
+					else if (data.message != null) msg = data.message.toString()
+				} else {
+					msg = '响应数据为空'
+				}
+			} else if (res != null && res.statusCode === 401) {
+				msg = '未授权，请重新登录'
+			} else if (res != null && res.statusCode === 404) {
+				msg = '孩子不存在或无权访问'
+			} else if (res != null && res.statusCode != null) {
+				msg = `请求失败，状态码 ${res.statusCode}`
+			} else {
+				msg = '请求失败，请检查网络连接'
+			}
+			callback({ success: ok, data: childData, message: msg })
+		},
+		fail: (err: any) => {
+			console.error('getChildDetail request fail:', err)
+			callback({ success: false, data: null, message: '网络异常，请稍后重试' })
+		}
+	})
+}
+
+/**
+ * 仅更新指定孩子的家长信件内容
+ * @param {string | number} childId 孩子ID
+ * @param {string} parentLetter 信件内容（可含占位符 [childName]、[gender]，服务端返回时会替换）
+ * @param {Function} callback 回调函数，参数为结果对象 {success: boolean, data: ChildInfo | null, message: string}
+ * @description 调用 PUT /children/:id/letter 接口
+ */
+export function updateChildLetter(childId: string | number, parentLetter: string, callback: (result: { success: boolean, data: ChildInfo | null, message: string }) => void) {
+	const requestUrl = `${BASE_URL}/children/${childId}/letter`
+	const token = getAuthToken()
+
+	uni.request({
+		url: requestUrl,
+		method: 'PUT',
+		timeout: 10000,
+		header: {
+			'Content-Type': 'application/json',
+			'Authorization': token != '' ? `Bearer ${token}` : ''
+		},
+		data: { parent_letter: parentLetter },
+		success: (res: any) => {
+			let ok = false
+			let childData: ChildInfo | null = null
+			let msg = '保存成功'
+
+			if (res != null && res.statusCode === 200) {
+				const data: ApiResponse<ChildInfo> = res.data as ApiResponse<ChildInfo>
+				if (data != null) {
+					ok = true
+					if (data.data != null) childData = data.data as ChildInfo
+					if (data.msg != null) msg = data.msg.toString()
+					else if (data.message != null) msg = data.message.toString()
+				} else {
+					msg = '响应数据为空'
+				}
+			} else if (res != null && res.statusCode === 401) {
+				msg = '未授权，请重新登录'
+			} else if (res != null && res.statusCode === 404) {
+				msg = '孩子不存在或无权访问'
+			} else if (res != null && res.statusCode != null) {
+				msg = `请求失败，状态码 ${res.statusCode}`
+			} else {
+				msg = '请求失败，请检查网络连接'
+			}
+			callback({ success: ok, data: childData, message: msg })
+		},
+		fail: (err: any) => {
+			console.error('updateChildLetter request fail:', err)
+			callback({ success: false, data: null, message: '网络异常，请稍后重试' })
 		}
 	})
 }
