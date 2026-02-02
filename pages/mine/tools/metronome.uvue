@@ -4,68 +4,53 @@
 			<view class="back-button" @click="goBack">
 				<text class="back-icon">←</text>
 			</view>
-			<text class="title">🎵 节拍器</text>
+			<text class="title">节拍器</text>
 		</view>
 		
 		<scroll-view class="content-scroll" scroll-y="true">
 		<view class="content">
-			<!-- 从事项进入（跳绳打卡）：今日已达成 x 次 + 目标数 + 达成目标 -->
+			<!-- 从事项进入（跳绳打卡）：今日已达成 x 次 + 目标数横向滑动 + 达成目标 -->
 			<view v-if="fromTask" class="jump-rope-section">
 				<text class="jump-rope-label">今日已达成 {{ progressCount }} 次</text>
 				<view class="jump-rope-target-row">
-					<text class="jump-rope-target-label">跳绳目标数</text>
-					<view class="jump-rope-stepper">
-						<view class="jump-rope-step-btn" @click="decreaseJumpTarget">
-							<text class="jump-rope-step-text">−</text>
-						</view>
-						<text class="jump-rope-target-value">{{ jumpRopeTarget }}</text>
-						<view class="jump-rope-step-btn" @click="increaseJumpTarget">
-							<text class="jump-rope-step-text">+</text>
-						</view>
-					</view>
+					<text class="jump-rope-target-label">跳绳目标数 {{ jumpRopeTarget }}</text>
 				</view>
+				<slider class="target-slider" :value="jumpRopeTarget" min="1" max="999" step="1" activeColor="#55C0FF" backgroundColor="#3A3E42" block-size="20" @changing="onJumpTargetChanging" @change="onJumpTargetChange" />
 				<view class="achieve-goal-btn" @click="achieveGoal">
 					<text class="achieve-goal-text">达成目标</text>
 				</view>
 			</view>
-			<view class="bpm-display">
-				<text class="bpm-label">BPM</text>
-				<text class="bpm-value">{{ bpm }}</text>
+			<!-- BPM：♩= xx BPM + 横向滑动 -->
+			<view class="bpm-section">
+				<text class="bpm-display-text">♩= {{ bpm }} BPM</text>
+				<slider class="bpm-slider" :value="bpm" min="40" max="200" step="1" activeColor="#55C0FF" backgroundColor="#3A3E42" block-size="20" @changing="onBpmChanging" @change="onBpmChange" />
 			</view>
-			
-			<view class="control-panel">
-				<view class="bpm-control">
-					<view class="bpm-button" @click="decreaseBpm">
-						<text class="bpm-button-text">−</text>
+			<!-- 音色：四个节拍，点击循环切换 高/中/低/无；当前播放节拍高亮 -->
+			<view class="tone-section">
+				<text class="tone-label">音色（点击节拍切换 高/中/低/无）</text>
+				<view class="tone-bars">
+					<view class="tone-bar-wrap" :class="{ 'tone-bar-playing': isPlaying && playingBeatIndex === 0 }" @click="cycleBeatTone(0)">
+						<view class="tone-bar" :class="getBeatBarClass(0)" :style="getBeatBarHeight(0)"></view>
 					</view>
-					<view class="bpm-input-wrapper">
-						<text class="bpm-display-text">{{ bpm }}</text>
+					<view class="tone-bar-wrap" :class="{ 'tone-bar-playing': isPlaying && playingBeatIndex === 1 }" @click="cycleBeatTone(1)">
+						<view class="tone-bar" :class="getBeatBarClass(1)" :style="getBeatBarHeight(1)"></view>
 					</view>
-					<view class="bpm-button" @click="increaseBpm">
-						<text class="bpm-button-text">+</text>
+					<view class="tone-bar-wrap" :class="{ 'tone-bar-playing': isPlaying && playingBeatIndex === 2 }" @click="cycleBeatTone(2)">
+						<view class="tone-bar" :class="getBeatBarClass(2)" :style="getBeatBarHeight(2)"></view>
 					</view>
-				</view>
-				
-				<view class="preset-buttons">
-					<view 
-						class="preset-button" 
-						v-for="preset in bpmPresets" 
-						:key="preset"
-						@click="setBpm(preset)"
-					>
-						<text class="preset-text">{{ preset }}</text>
+					<view class="tone-bar-wrap" :class="{ 'tone-bar-playing': isPlaying && playingBeatIndex === 3 }" @click="cycleBeatTone(3)">
+						<view class="tone-bar" :class="getBeatBarClass(3)" :style="getBeatBarHeight(3)"></view>
 					</view>
 				</view>
 			</view>
 			
 			<view class="play-button-wrapper">
 				<view class="play-button" @click="toggleMetronome">
-					<text class="play-icon">{{ isPlaying ? '⏸️' : '▶️' }}</text>
+					<text class="play-icon">{{ isPlaying ? '⏸' : '▶' }}</text>
 				</view>
 			</view>
 			
-			<view class="beat-indicator" v-if="isPlaying">
-				<view class="beat-circle" :class="{ 'beat-active': isBeat }"></view>
+			<view class="beat-indicator" v-if="isPlaying" :class="{ 'beat-active': isBeat }">
 			</view>
 		</view>
 		</scroll-view>
@@ -83,12 +68,23 @@
 				isBeat: false,
 				metronomeTimer: 0,
 				beatTimer: 0,
-				bpmPresets: [60, 80, 100, 120, 140, 160],
+				currentBeatIndex: 0,
+				playingBeatIndex: -1,
+				beatTones: ['mid', 'mid', 'mid', 'mid'] as string[],
 				fromTask: false,
 				todoId: '',
 				childId: '',
 				progressCount: 0,
-				jumpRopeTarget: 100
+				jumpRopeTarget: 100,
+				audioDing: null as any,
+				audioDi: null as any,
+				audioDa: null as any,
+				audioDingAlt: null as any,
+				audioDiAlt: null as any,
+				audioDaAlt: null as any,
+				audioDingNext: 0 as number,
+				audioDiNext: 0 as number,
+				audioDaNext: 0 as number
 			}
 		},
 		onLoad(options: any) {
@@ -100,14 +96,12 @@
 				getCheckin(this.todoId, (res) => {
 					if (res.success && res.data != null) {
 						this.progressCount = res.data.progress_count != null ? res.data.progress_count : 0
-						// 跳绳目标数与服务端一致：有 completion_target 则用服务端值（含 0），否则保持默认 100
 						if (res.data.completion_target != null && typeof res.data.completion_target === 'number') {
 							this.jumpRopeTarget = res.data.completion_target >= 0 ? res.data.completion_target : 100
 						}
 					}
 				})
 			}
-			// 从本地存储读取保存的BPM
 			try {
 				const savedBpm = uni.getStorageSync('metronomeBpm')
 				if (savedBpm != null && savedBpm != "") {
@@ -116,40 +110,93 @@
 						this.bpm = bpmValue
 					}
 				}
-			} catch (e) {
-				// 忽略错误
-			}
+			} catch (e) {}
+			try {
+				const savedBeatTones = uni.getStorageSync('metronomeBeatTones')
+				if (savedBeatTones != null && savedBeatTones != "") {
+					const arr = JSON.parse(savedBeatTones.toString()) as string[]
+					if (Array.isArray(arr) && arr.length >= 4) {
+						for (let i = 0; i < 4; i++) {
+							if (arr[i] === 'high' || arr[i] === 'mid' || arr[i] === 'low' || arr[i] === 'none') {
+								this.beatTones[i] = arr[i]
+							}
+						}
+					}
+				}
+			} catch (e) {}
+			this.initBeatAudio()
 		},
 		onHide() {
 			this.stopMetronome()
 		},
 		onUnload() {
 			this.stopMetronome()
+			this.destroyBeatAudio()
 		},
 		methods: {
-			increaseBpm() {
-				if (this.bpm < 200) {
-					this.bpm++
+			onBpmChanging(e: any) {
+				const v = e.detail != null && e.detail.value != null ? Number(e.detail.value) : this.bpm
+				const bpmVal = Math.floor(v)
+				if (bpmVal >= 40 && bpmVal <= 200) {
+					this.bpm = bpmVal
+				}
+			},
+			onBpmChange(e: any) {
+				const v = e.detail != null && e.detail.value != null ? Number(e.detail.value) : this.bpm
+				const bpmVal = Math.floor(v)
+				if (bpmVal >= 40 && bpmVal <= 200) {
+					this.bpm = bpmVal
 					this.saveBpm()
 					if (this.isPlaying) {
 						this.restartMetronome()
 					}
 				}
 			},
-			decreaseBpm() {
-				if (this.bpm > 40) {
-					this.bpm--
-					this.saveBpm()
-					if (this.isPlaying) {
-						this.restartMetronome()
-					}
+			onJumpTargetChanging(e: any) {
+				const v = e.detail != null && e.detail.value != null ? Number(e.detail.value) : this.jumpRopeTarget
+				const val = Math.floor(v)
+				if (val >= 1 && val <= 999) {
+					this.jumpRopeTarget = val
 				}
 			},
-			setBpm(value: number) {
-				this.bpm = value
-				this.saveBpm()
-				if (this.isPlaying) {
-					this.restartMetronome()
+			onJumpTargetChange(e: any) {
+				const v = e.detail != null && e.detail.value != null ? Number(e.detail.value) : this.jumpRopeTarget
+				const val = Math.floor(v)
+				if (val >= 1 && val <= 999) {
+					this.jumpRopeTarget = val
+				}
+			},
+			cycleBeatTone(index: number) {
+				if (index < 0 || index > 3) return
+				const order = ['high', 'mid', 'low', 'none']
+				const cur = this.beatTones[index]
+				let nextIndex = 0
+				for (let i = 0; i < order.length; i++) {
+					if (order[i] === cur) {
+						nextIndex = (i + 1) % 4
+						break
+					}
+				}
+				this.beatTones[index] = order[nextIndex]
+				try {
+					uni.setStorageSync('metronomeBeatTones', JSON.stringify(this.beatTones))
+				} catch (e) {}
+			},
+			getBeatBarHeight(index: number): any {
+				if (index < 0 || index > 3) return { height: '4px' }
+				const t = this.beatTones[index]
+				if (t === 'high') return { height: '100%' }
+				if (t === 'mid') return { height: '66%' }
+				if (t === 'low') return { height: '33%' }
+				return { height: '4px' }
+			},
+			getBeatBarClass(index: number): any {
+				if (index < 0 || index > 3) return {}
+				const t = this.beatTones[index]
+				const isNone = t === 'none'
+				return {
+					'tone-bar-active': !isNone,
+					'tone-bar-outline': isNone
 				}
 			},
 			saveBpm() {
@@ -180,6 +227,7 @@
 			},
 			stopMetronome() {
 				this.isPlaying = false
+				this.playingBeatIndex = -1
 				if (this.metronomeTimer != 0) {
 					clearInterval(this.metronomeTimer)
 					this.metronomeTimer = 0
@@ -194,37 +242,73 @@
 				this.stopMetronome()
 				this.startMetronome()
 			},
+			initBeatAudio() {
+				if (this.audioDing != null) return
+				try {
+					this.audioDing = uni.createInnerAudioContext()
+					this.audioDing.src = '/static/games/music/audio/ding.mp3'
+					this.audioDingAlt = uni.createInnerAudioContext()
+					this.audioDingAlt.src = '/static/games/music/audio/ding.mp3'
+					this.audioDi = uni.createInnerAudioContext()
+					this.audioDi.src = '/static/games/music/audio/di.mp3'
+					this.audioDiAlt = uni.createInnerAudioContext()
+					this.audioDiAlt.src = '/static/games/music/audio/di.mp3'
+					this.audioDa = uni.createInnerAudioContext()
+					this.audioDa.src = '/static/games/music/audio/da.mp3'
+					this.audioDaAlt = uni.createInnerAudioContext()
+					this.audioDaAlt.src = '/static/games/music/audio/da.mp3'
+				} catch (e) {
+					console.error('initBeatAudio fail', e)
+				}
+			},
+			destroyBeatAudio() {
+				try {
+					if (this.audioDing != null) { this.audioDing.destroy(); this.audioDing = null }
+					if (this.audioDingAlt != null) { this.audioDingAlt.destroy(); this.audioDingAlt = null }
+					if (this.audioDi != null) { this.audioDi.destroy(); this.audioDi = null }
+					if (this.audioDiAlt != null) { this.audioDiAlt.destroy(); this.audioDiAlt = null }
+					if (this.audioDa != null) { this.audioDa.destroy(); this.audioDa = null }
+					if (this.audioDaAlt != null) { this.audioDaAlt.destroy(); this.audioDaAlt = null }
+				} catch (e) {}
+			},
 			playBeat() {
-				// 视觉反馈
 				this.isBeat = true
+				this.playingBeatIndex = this.currentBeatIndex
 				this.beatTimer = setTimeout(() => {
 					this.isBeat = false
 				}, 100) as number
-				
-				// 振动反馈（某些平台可能不支持）
+				const t = this.beatTones[this.currentBeatIndex]
+				this.currentBeatIndex = (this.currentBeatIndex + 1) % 4
+				if (t !== 'none') {
+					let ctx: any = null
+					if (t === 'high') {
+						ctx = this.audioDingNext === 0 ? this.audioDing : this.audioDingAlt
+						this.audioDingNext = 1 - this.audioDingNext
+					} else if (t === 'mid') {
+						ctx = this.audioDiNext === 0 ? this.audioDi : this.audioDiAlt
+						this.audioDiNext = 1 - this.audioDiNext
+					} else {
+						ctx = this.audioDaNext === 0 ? this.audioDa : this.audioDaAlt
+						this.audioDaNext = 1 - this.audioDaNext
+					}
+					if (ctx != null) {
+						try {
+							ctx.seek(0)
+							ctx.play()
+						} catch (e) {
+							try { ctx.play() } catch (e2) {}
+						}
+					}
+				}
 				// #ifdef APP-PLUS
 				try {
-					uni.vibrateShort({
-						type: 'light'
-					})
-				} catch (e) {
-					// 忽略振动失败
-				}
+					uni.vibrateShort({ type: 'light' })
+				} catch (e) {}
 				// #endif
 			},
 			goBack() {
 				this.stopMetronome()
 				uni.navigateBack()
-			},
-			increaseJumpTarget() {
-				if (this.jumpRopeTarget < 9999) {
-					this.jumpRopeTarget++
-				}
-			},
-			decreaseJumpTarget() {
-				if (this.jumpRopeTarget > 1) {
-					this.jumpRopeTarget--
-				}
 			},
 			achieveGoal() {
 				if (this.todoId === '') return
@@ -245,7 +329,7 @@
 <style>
 	.container {
 		flex: 1;
-		background-color: #FFB74D;
+		background-color: #2E3236;
 		padding: 12px;
 	}
 	
@@ -265,11 +349,8 @@
 	.back-button {
 		width: 44px;
 		height: 44px;
-		background-color: #FFFFFF;
+		background-color: #3A3E42;
 		border-radius: 22px;
-		border: 2px solid #FFFFFF;
-		border-bottom-width: 4px;
-		border-bottom-color: #E0E0E0;
 		align-items: center;
 		justify-content: center;
 		position: absolute;
@@ -278,13 +359,12 @@
 	}
 	
 	.back-button:active {
-		background-color: #F5F5F5;
-		border-bottom-width: 3px;
+		background-color: #4A4E52;
 	}
 	
 	.back-icon {
 		font-size: 24px;
-		color: #FF9800;
+		color: #FFFFFF;
 		font-weight: bold;
 	}
 	
@@ -294,10 +374,6 @@
 		font-weight: bold;
 		color: #FFFFFF;
 		text-align: center;
-		background-color: #FF9800;
-		padding: 6px 12px;
-		border-radius: 8px;
-		border: 2px solid #FFFFFF;
 	}
 	
 	.content {
@@ -309,11 +385,10 @@
 	.jump-rope-section {
 		width: 100%;
 		align-items: center;
-		margin-bottom: 16px;
-		padding: 12px 16px;
-		background-color: rgba(0, 0, 0, 0.2);
-		border-radius: 10px;
-		border: 2px solid #FFFFFF;
+		margin-bottom: 20px;
+		padding: 14px 16px;
+		background-color: #3A3E42;
+		border-radius: 12px;
 	}
 	
 	.jump-rope-label {
@@ -325,190 +400,124 @@
 	
 	.jump-rope-target-row {
 		align-items: center;
-		margin-bottom: 10px;
+		margin-bottom: 6px;
 	}
 	
 	.jump-rope-target-label {
 		font-size: 15px;
-		color: #FFFFFF;
-		margin-bottom: 6px;
+		color: #9CA3A8;
+		margin-bottom: 4px;
 	}
 	
-	.jump-rope-stepper {
-		flex-direction: row;
-		align-items: center;
-		justify-content: center;
-	}
-	
-	.jump-rope-step-btn {
-		width: 42px;
-		height: 42px;
-		background-color: #FFFFFF;
-		border-radius: 21px;
-		border: 2px solid #FFFFFF;
-		border-bottom-width: 4px;
-		border-bottom-color: #E0E0E0;
-		align-items: center;
-		justify-content: center;
-		margin: 0 10px;
-	}
-	
-	.jump-rope-step-btn:active {
-		background-color: #F5F5F5;
-		border-bottom-width: 2px;
-	}
-	
-	.jump-rope-step-text {
-		font-size: 24px;
-		color: #FF9800;
-		font-weight: bold;
-	}
-	
-	.jump-rope-target-value {
-		font-size: 24px;
-		color: #FFFFFF;
-		font-weight: bold;
-		min-width: 48px;
-		text-align: center;
+	.target-slider {
+		width: 100%;
+		margin: 8px 0 16px 0;
 	}
 	
 	.achieve-goal-btn {
 		width: 100%;
 		height: 44px;
-		background-color: #FFFFFF;
-		border-radius: 10px;
-		border: 2px solid #FFFFFF;
-		border-bottom-width: 4px;
-		border-bottom-color: #E0E0E0;
+		background-color: #55C0FF;
+		border-radius: 12px;
 		align-items: center;
 		justify-content: center;
 	}
 	
 	.achieve-goal-btn:active {
-		background-color: #F5F5F5;
-		border-bottom-width: 2px;
+		background-color: #6BC8FF;
+		opacity: 0.95;
 	}
 	
 	.achieve-goal-text {
 		font-size: 18px;
-		color: #FF9800;
+		color: #2E3236;
 		font-weight: bold;
 	}
 	
-	.bpm-display {
-		align-items: center;
-		margin-bottom: 16px;
-	}
-	
-	.bpm-label {
-		font-size: 18px;
-		color: #FFFFFF;
-		font-weight: bold;
-		margin-bottom: 6px;
-		background-color: rgba(0, 0, 0, 0.2);
-		padding: 2px 10px;
-		border-radius: 4px;
-	}
-	
-	.bpm-value {
-		font-size: 48px;
-		color: #FFFFFF;
-		font-weight: bold;
-		background-color: rgba(0, 0, 0, 0.3);
-		padding: 4px 14px;
-		border-radius: 8px;
-		border: 2px solid #FFFFFF;
-	}
-	
-	.control-panel {
+	.bpm-section {
 		width: 100%;
 		align-items: center;
-		margin-bottom: 16px;
-	}
-	
-	.bpm-control {
-		flex-direction: row;
-		align-items: center;
-		justify-content: center;
-		margin-bottom: 14px;
-	}
-	
-	.bpm-button {
-		width: 48px;
-		height: 48px;
-		background-color: #FFFFFF;
-		border-radius: 24px;
-		border: 2px solid #FFFFFF;
-		border-bottom-width: 4px;
-		border-bottom-color: #E0E0E0;
-		align-items: center;
-		justify-content: center;
-		margin: 0 10px;
-	}
-	
-	.bpm-button:active {
-		background-color: #F5F5F5;
-		border-bottom-width: 2px;
-	}
-	
-	.bpm-button-text {
-		font-size: 28px;
-		color: #FF9800;
-		font-weight: bold;
-	}
-	
-	.bpm-input-wrapper {
-		width: 90px;
-		height: 52px;
-		background-color: #FFFFFF;
+		margin-bottom: 20px;
+		padding: 14px 16px;
+		background-color: #3A3E42;
 		border-radius: 12px;
-		border: 2px solid #FFFFFF;
-		border-bottom-width: 4px;
-		border-bottom-color: #E0E0E0;
-		align-items: center;
-		justify-content: center;
 	}
 	
 	.bpm-display-text {
-		font-size: 26px;
-		color: #FF9800;
+		font-size: 28px;
+		color: #FFFFFF;
 		font-weight: bold;
-		text-align: center;
+		margin-bottom: 12px;
 	}
 	
-	.preset-buttons {
-		flex-direction: row;
-		flex-wrap: wrap;
-		justify-content: center;
+	.bpm-slider {
 		width: 100%;
+		margin: 4px 0;
 	}
 	
-	.preset-button {
-		min-width: 52px;
-		height: 38px;
-		background-color: #FFFFFF;
-		border-radius: 10px;
-		border: 2px solid #FFFFFF;
-		border-bottom-width: 4px;
-		border-bottom-color: #E0E0E0;
+	.tone-section {
+		width: 100%;
 		align-items: center;
+		margin-bottom: 20px;
+		padding: 14px 16px;
+		background-color: #3A3E42;
+		border-radius: 12px;
+	}
+	
+	.tone-label {
+		font-size: 16px;
+		color: #9CA3A8;
+		margin-bottom: 12px;
+	}
+	
+	.tone-bars {
+		flex-direction: row;
+		align-items: flex-end;
 		justify-content: center;
-		margin: 4px;
+		height: 72px;
 	}
 	
-	.preset-button:active {
-		background-color: #F5F5F5;
-		border-bottom-width: 2px;
+	.tone-bar-wrap {
+		width: 36px;
+		height: 72px;
+		margin: 0 6px;
+		align-items: flex-end;
+		justify-content: center;
+		border-radius: 8px;
 	}
 	
-	.preset-text {
-		font-size: 15px;
-		color: #FF9800;
-		font-weight: bold;
+	.tone-bar-playing {
+		background-color: rgba(85, 192, 255, 0.35);
+		border-radius: 8px;
+	}
+	
+	.tone-bar {
+		width: 24px;
+		min-height: 4px;
+		border-radius: 4px 4px 0 0;
+		background-color: rgba(255, 255, 255, 0.25);
+		align-self: center;
+	}
+	
+	.tone-bar-active {
+		background-color: #55C0FF;
+	}
+	
+	.tone-bar-outline {
+		width: 24px;
+		height: 4px;
+		background-color: transparent;
+		border: 2px solid rgba(255, 255, 255, 0.4);
+		border-radius: 4px;
+	}
+	
+	.tone-bar-outline.tone-bar-active {
+		border-color: #55C0FF;
+		background-color: rgba(85, 192, 255, 0.3);
 	}
 	
 	.play-button-wrapper {
-		margin-top: 16px;
+		margin-top: 20px;
 		align-items: center;
 		justify-content: center;
 	}
@@ -516,22 +525,20 @@
 	.play-button {
 		width: 88px;
 		height: 88px;
-		background-color: #FFFFFF;
+		background-color: transparent;
 		border-radius: 44px;
-		border: 3px solid #FFFFFF;
-		border-bottom-width: 6px;
-		border-bottom-color: #E0E0E0;
+		border: 2px solid #888A8C;
 		align-items: center;
 		justify-content: center;
 	}
 	
 	.play-button:active {
-		background-color: #F5F5F5;
-		border-bottom-width: 3px;
+		background-color: rgba(255, 255, 255, 0.08);
 	}
 	
 	.play-icon {
 		font-size: 44px;
+		color: #FFFFFF;
 	}
 	
 	.beat-indicator {
@@ -544,13 +551,13 @@
 		width: 64px;
 		height: 64px;
 		border-radius: 32px;
-		background: rgba(255, 255, 255, 0.3);
-		border: 3px solid #FFFFFF;
+		background: rgba(255, 255, 255, 0.2);
+		border: 2px solid rgba(255, 255, 255, 0.4);
 	}
 	
 	.beat-active {
-		background-color: #FFFFFF;
-		border-width: 4px;
+		background-color: #55C0FF;
+		border-color: #55C0FF;
 	}
 </style>
 
