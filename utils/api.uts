@@ -665,16 +665,70 @@ export function uncompleteDailyTodo(todoId: string | number, callback: (result: 
 // ==================== 打卡相关 API (checkin) ====================
 
 /**
+ * 查询某条每日待办对应的打卡记录
+ * @param {string | number} dailyTodoId 每日待办 ID
+ * @param {Function} callback 回调函数，参数为 { success, data: { progress_count?, completion_target?, is_completed? }, message }
+ * @description 调用 GET /checkin/:daily_todo_id，未打卡时 progress_count 为 0
+ */
+export function getCheckin(dailyTodoId: string | number, callback: (result: { success: boolean, data: { progress_count?: number | null, completion_target?: number | null, is_completed?: number | boolean | null }, message: string }) => void) {
+	const requestUrl = `${BASE_URL}/checkin/${dailyTodoId}`
+	const token = getAuthToken()
+	uni.request({
+		url: requestUrl,
+		method: 'GET',
+		timeout: 10000,
+		header: {
+			'Content-Type': 'application/json',
+			'Authorization': token != '' ? `Bearer ${token}` : ''
+		},
+		success: (res: any) => {
+			let ok = false
+			let msg = '请求失败'
+			const emptyData = { progress_count: 0, completion_target: null as number | null, is_completed: null as number | boolean | null }
+			if (res != null && res.statusCode === 200) {
+				ok = true
+				const top = res.data as { message?: string, data?: { progress_count?: number | null, completion_target?: number | null, is_completed?: number | boolean | null } } | null
+				if (top != null && top.message != null) msg = top.message.toString()
+				const body = (top != null && top.data != null) ? top.data : (res.data as { progress_count?: number | null, completion_target?: number | null, is_completed?: number | boolean | null } | null)
+				if (body != null) {
+					callback({ success: true, data: { progress_count: body.progress_count != null ? body.progress_count : 0, completion_target: body.completion_target != null ? body.completion_target : null, is_completed: body.is_completed != null ? body.is_completed : null }, message: msg })
+					return
+				}
+			} else if (res != null && res.statusCode === 401) {
+				msg = '未授权，请重新登录'
+			} else if (res != null && res.statusCode === 404) {
+				msg = '待办不存在或已失效'
+			} else if (res != null && res.statusCode != null) {
+				msg = `请求失败，状态码 ${res.statusCode}`
+			}
+			callback({ success: ok, data: emptyData, message: msg })
+		},
+		fail: (err: any) => {
+			console.error('getCheckin request fail:', err)
+			callback({ success: false, data: { progress_count: 0, completion_target: null, is_completed: null }, message: '网络异常，请稍后重试' })
+		}
+	})
+}
+
+/**
  * 更新打卡记录（完成状态、进度等）
  * @param {string | number} dailyTodoId 每日待办 ID
- * @param {object} params 请求体：is_completed（必填 0|1）、可选 checkin_remark、progress_count、progress_duration_minutes
+ * @param {object} params 请求体：is_completed（必填 0|1）；可选 checkin_remark、progress_count（覆盖）、progress_count_delta（累加，与 progress_count 二选一）、progress_duration_minutes
  * @param {Function} callback 回调函数
  * @description 调用 PUT /checkin/:daily_todo_id，后端完成状态存于 todo_checkin_record 表
  */
-export function updateCheckin(dailyTodoId: string | number, params: { is_completed: 0 | 1, checkin_remark?: string, progress_count?: number, progress_duration_minutes?: number }, callback: (result: { success: boolean, message: string }) => void) {
+export function updateCheckin(dailyTodoId: string | number, params: { is_completed: 0 | 1, checkin_remark?: string, progress_count?: number, progress_count_delta?: number, progress_duration_minutes?: number }, callback: (result: { success: boolean, message: string }) => void) {
 	const requestUrl = `${BASE_URL}/checkin/${dailyTodoId}`
 	const token = getAuthToken()
-	
+	const data: any = {
+		is_completed: params.is_completed,
+		checkin_remark: params.checkin_remark,
+		progress_count: params.progress_count,
+		progress_duration_minutes: params.progress_duration_minutes
+	}
+	if (params.progress_count_delta != null) {
+		data.progress_count_delta = params.progress_count_delta
+	}
 	uni.request({
 		url: requestUrl,
 		method: 'PUT',
@@ -683,12 +737,7 @@ export function updateCheckin(dailyTodoId: string | number, params: { is_complet
 			'Content-Type': 'application/json',
 			'Authorization': token != '' ? `Bearer ${token}` : ''
 		},
-		data: {
-			is_completed: params.is_completed,
-			checkin_remark: params.checkin_remark,
-			progress_count: params.progress_count,
-			progress_duration_minutes: params.progress_duration_minutes
-		},
+		data: data,
 		success: (res: any) => {
 			let ok = false
 			let msg = '更新成功'

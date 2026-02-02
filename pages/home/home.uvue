@@ -74,8 +74,14 @@
 					:key="task.id"
 				>
 					<text class="task-name">{{ task.item_name }}</text>
-					<view v-if="task.completed" class="task-completed-stamp">
+					<view v-if="task.completed && !isMetronomeTask(task)" class="task-completed-stamp">
 						<text class="stamp-text">已完成</text>
+					</view>
+					<view v-else-if="task.completed && isMetronomeTask(task)" class="task-progress-wrap">
+						<text class="task-progress-text">已完成 {{ task.progress_count != null ? task.progress_count : 0 }} 次</text>
+						<view class="task-action task-action-small" @click="goToCompleteTask(task)">
+							<text class="complete-button">继续</text>
+						</view>
 					</view>
 					<view v-else-if="formatTaskProgress(task)" class="task-progress-wrap">
 						<text class="task-progress-text">{{ formatTaskProgress(task) }}</text>
@@ -934,6 +940,10 @@
 				}
 				return []
 			},
+			/** 是否为节拍器任务（跳绳等），完成后仍可继续打卡 */
+			isMetronomeTask(task: TaskItemWithCompleted): boolean {
+				return task.path_url != null && task.path_url.indexOf('metronome') >= 0
+			},
 			/** 已开始未完成时显示进度文案，如 "3/5 次"、"20/30 分钟"，无进度返回空字符串 */
 			formatTaskProgress(task: TaskItemWithCompleted): string {
 				if (task.completed) return ''
@@ -972,6 +982,21 @@
 					let url = task.path_url
 					// 亲子爱心信：从事项进入需传 from=task&todoId&id，以便只读+已读按钮
 					if (task.path_url.indexOf('love-letter') >= 0) {
+						const list = this.currentRole === 'child' ? this.todayDailyTodos.child : this.todayDailyTodos.parent
+						let todoId = ''
+						for (let i = 0; i < list.length; i++) {
+							const todo = list[i]
+							if (todo.item_id != null && todo.item_id.toString() === task.id) {
+								if (todo.id != null) todoId = todo.id.toString()
+								break
+							}
+						}
+						const childId = this.getCurrentChildId() || ''
+						const sep = task.path_url.indexOf('?') >= 0 ? '&' : '?'
+						url = task.path_url + sep + 'from=task&todoId=' + encodeURIComponent(todoId) + '&id=' + encodeURIComponent(childId)
+					}
+					// 节拍器（跳绳等）：从事项进入需传 from=task&todoId&id，供打卡与「今日已达成 x 次」
+					if (task.path_url.indexOf('metronome') >= 0) {
 						const list = this.currentRole === 'child' ? this.todayDailyTodos.child : this.todayDailyTodos.parent
 						let todoId = ''
 						for (let i = 0; i < list.length; i++) {

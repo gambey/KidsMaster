@@ -7,7 +7,27 @@
 			<text class="title">🎵 节拍器</text>
 		</view>
 		
+		<scroll-view class="content-scroll" scroll-y="true">
 		<view class="content">
+			<!-- 从事项进入（跳绳打卡）：今日已达成 x 次 + 目标数 + 达成目标 -->
+			<view v-if="fromTask" class="jump-rope-section">
+				<text class="jump-rope-label">今日已达成 {{ progressCount }} 次</text>
+				<view class="jump-rope-target-row">
+					<text class="jump-rope-target-label">跳绳目标数</text>
+					<view class="jump-rope-stepper">
+						<view class="jump-rope-step-btn" @click="decreaseJumpTarget">
+							<text class="jump-rope-step-text">−</text>
+						</view>
+						<text class="jump-rope-target-value">{{ jumpRopeTarget }}</text>
+						<view class="jump-rope-step-btn" @click="increaseJumpTarget">
+							<text class="jump-rope-step-text">+</text>
+						</view>
+					</view>
+				</view>
+				<view class="achieve-goal-btn" @click="achieveGoal">
+					<text class="achieve-goal-text">达成目标</text>
+				</view>
+			</view>
 			<view class="bpm-display">
 				<text class="bpm-label">BPM</text>
 				<text class="bpm-value">{{ bpm }}</text>
@@ -48,10 +68,13 @@
 				<view class="beat-circle" :class="{ 'beat-active': isBeat }"></view>
 			</view>
 		</view>
+		</scroll-view>
 	</view>
 </template>
 
 <script lang="uts">
+	import { getCheckin, updateCheckin } from '../../../utils/api.uts'
+
 	export default {
 		data() {
 			return {
@@ -60,10 +83,30 @@
 				isBeat: false,
 				metronomeTimer: 0,
 				beatTimer: 0,
-				bpmPresets: [60, 80, 100, 120, 140, 160]
+				bpmPresets: [60, 80, 100, 120, 140, 160],
+				fromTask: false,
+				todoId: '',
+				childId: '',
+				progressCount: 0,
+				jumpRopeTarget: 100
 			}
 		},
-		onLoad() {
+		onLoad(options: any) {
+			// 从事项进入（跳绳打卡）：解析 from、todoId、id，拉取打卡进度
+			if (options != null && options.from === 'task' && options.todoId != null && options.todoId !== '') {
+				this.fromTask = true
+				this.todoId = options.todoId.toString()
+				if (options.id != null) this.childId = options.id.toString()
+				getCheckin(this.todoId, (res) => {
+					if (res.success && res.data != null) {
+						this.progressCount = res.data.progress_count != null ? res.data.progress_count : 0
+						// 跳绳目标数与服务端一致：有 completion_target 则用服务端值（含 0），否则保持默认 100
+						if (res.data.completion_target != null && typeof res.data.completion_target === 'number') {
+							this.jumpRopeTarget = res.data.completion_target >= 0 ? res.data.completion_target : 100
+						}
+					}
+				})
+			}
 			// 从本地存储读取保存的BPM
 			try {
 				const savedBpm = uni.getStorageSync('metronomeBpm')
@@ -172,6 +215,28 @@
 			goBack() {
 				this.stopMetronome()
 				uni.navigateBack()
+			},
+			increaseJumpTarget() {
+				if (this.jumpRopeTarget < 9999) {
+					this.jumpRopeTarget++
+				}
+			},
+			decreaseJumpTarget() {
+				if (this.jumpRopeTarget > 1) {
+					this.jumpRopeTarget--
+				}
+			},
+			achieveGoal() {
+				if (this.todoId === '') return
+				updateCheckin(this.todoId, { is_completed: 1, progress_count_delta: this.jumpRopeTarget }, (res) => {
+					if (res.success) {
+						this.progressCount = this.progressCount + this.jumpRopeTarget
+						uni.showToast({ title: '打卡成功！', icon: 'success' })
+						uni.navigateBack()
+					} else {
+						uni.showToast({ title: res.message != null ? res.message : '打卡失败', icon: 'none' })
+					}
+				})
 			}
 		}
 	}
@@ -181,24 +246,29 @@
 	.container {
 		flex: 1;
 		background-color: #FFB74D;
-		padding: 20px;
+		padding: 12px;
+	}
+	
+	.content-scroll {
+		flex: 1;
+		height: 100%;
 	}
 	
 	.header {
-		margin-top: 20px;
-		margin-bottom: 30px;
+		margin-top: 8px;
+		margin-bottom: 12px;
 		flex-direction: row;
 		align-items: center;
 		position: relative;
 	}
 	
 	.back-button {
-		width: 50px;
-		height: 50px;
+		width: 44px;
+		height: 44px;
 		background-color: #FFFFFF;
-		border-radius: 25px;
-		border: 3px solid #FFFFFF;
-		border-bottom-width: 6px;
+		border-radius: 22px;
+		border: 2px solid #FFFFFF;
+		border-bottom-width: 4px;
 		border-bottom-color: #E0E0E0;
 		align-items: center;
 		justify-content: center;
@@ -220,44 +290,132 @@
 	
 	.title {
 		flex: 1;
-		font-size: 32px;
+		font-size: 26px;
 		font-weight: bold;
 		color: #FFFFFF;
 		text-align: center;
 		background-color: #FF9800;
-		padding: 8px 16px;
+		padding: 6px 12px;
 		border-radius: 8px;
 		border: 2px solid #FFFFFF;
 	}
 	
 	.content {
-		flex: 1;
+		align-items: center;
+		padding: 12px 16px;
+		padding-bottom: 24px;
+	}
+	
+	.jump-rope-section {
+		width: 100%;
+		align-items: center;
+		margin-bottom: 16px;
+		padding: 12px 16px;
+		background-color: rgba(0, 0, 0, 0.2);
+		border-radius: 10px;
+		border: 2px solid #FFFFFF;
+	}
+	
+	.jump-rope-label {
+		font-size: 18px;
+		color: #FFFFFF;
+		font-weight: bold;
+		margin-bottom: 8px;
+	}
+	
+	.jump-rope-target-row {
+		align-items: center;
+		margin-bottom: 10px;
+	}
+	
+	.jump-rope-target-label {
+		font-size: 15px;
+		color: #FFFFFF;
+		margin-bottom: 6px;
+	}
+	
+	.jump-rope-stepper {
+		flex-direction: row;
 		align-items: center;
 		justify-content: center;
-		padding: 20px;
+	}
+	
+	.jump-rope-step-btn {
+		width: 42px;
+		height: 42px;
+		background-color: #FFFFFF;
+		border-radius: 21px;
+		border: 2px solid #FFFFFF;
+		border-bottom-width: 4px;
+		border-bottom-color: #E0E0E0;
+		align-items: center;
+		justify-content: center;
+		margin: 0 10px;
+	}
+	
+	.jump-rope-step-btn:active {
+		background-color: #F5F5F5;
+		border-bottom-width: 2px;
+	}
+	
+	.jump-rope-step-text {
+		font-size: 24px;
+		color: #FF9800;
+		font-weight: bold;
+	}
+	
+	.jump-rope-target-value {
+		font-size: 24px;
+		color: #FFFFFF;
+		font-weight: bold;
+		min-width: 48px;
+		text-align: center;
+	}
+	
+	.achieve-goal-btn {
+		width: 100%;
+		height: 44px;
+		background-color: #FFFFFF;
+		border-radius: 10px;
+		border: 2px solid #FFFFFF;
+		border-bottom-width: 4px;
+		border-bottom-color: #E0E0E0;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.achieve-goal-btn:active {
+		background-color: #F5F5F5;
+		border-bottom-width: 2px;
+	}
+	
+	.achieve-goal-text {
+		font-size: 18px;
+		color: #FF9800;
+		font-weight: bold;
 	}
 	
 	.bpm-display {
 		align-items: center;
-		margin-bottom: 40px;
+		margin-bottom: 16px;
 	}
 	
 	.bpm-label {
-		font-size: 24px;
+		font-size: 18px;
 		color: #FFFFFF;
 		font-weight: bold;
-		margin-bottom: 10px;
+		margin-bottom: 6px;
 		background-color: rgba(0, 0, 0, 0.2);
-		padding: 4px 12px;
+		padding: 2px 10px;
 		border-radius: 4px;
 	}
 	
 	.bpm-value {
-		font-size: 72px;
+		font-size: 48px;
 		color: #FFFFFF;
 		font-weight: bold;
 		background-color: rgba(0, 0, 0, 0.3);
-		padding: 8px 20px;
+		padding: 4px 14px;
 		border-radius: 8px;
 		border: 2px solid #FFFFFF;
 	}
@@ -265,54 +423,54 @@
 	.control-panel {
 		width: 100%;
 		align-items: center;
-		margin-bottom: 40px;
+		margin-bottom: 16px;
 	}
 	
 	.bpm-control {
 		flex-direction: row;
 		align-items: center;
 		justify-content: center;
-		margin-bottom: 30px;
+		margin-bottom: 14px;
 	}
 	
 	.bpm-button {
-		width: 60px;
-		height: 60px;
+		width: 48px;
+		height: 48px;
 		background-color: #FFFFFF;
-		border-radius: 30px;
-		border: 3px solid #FFFFFF;
-		border-bottom-width: 6px;
+		border-radius: 24px;
+		border: 2px solid #FFFFFF;
+		border-bottom-width: 4px;
 		border-bottom-color: #E0E0E0;
 		align-items: center;
 		justify-content: center;
-		margin: 0 15px;
+		margin: 0 10px;
 	}
 	
 	.bpm-button:active {
 		background-color: #F5F5F5;
-		border-bottom-width: 3px;
+		border-bottom-width: 2px;
 	}
 	
 	.bpm-button-text {
-		font-size: 36px;
+		font-size: 28px;
 		color: #FF9800;
 		font-weight: bold;
 	}
 	
 	.bpm-input-wrapper {
-		width: 120px;
-		height: 70px;
+		width: 90px;
+		height: 52px;
 		background-color: #FFFFFF;
-		border-radius: 15px;
-		border: 3px solid #FFFFFF;
-		border-bottom-width: 6px;
+		border-radius: 12px;
+		border: 2px solid #FFFFFF;
+		border-bottom-width: 4px;
 		border-bottom-color: #E0E0E0;
 		align-items: center;
 		justify-content: center;
 	}
 	
 	.bpm-display-text {
-		font-size: 32px;
+		font-size: 26px;
 		color: #FF9800;
 		font-weight: bold;
 		text-align: center;
@@ -326,42 +484,42 @@
 	}
 	
 	.preset-button {
-		min-width: 80px;
-		height: 50px;
+		min-width: 52px;
+		height: 38px;
 		background-color: #FFFFFF;
-		border-radius: 12px;
-		border: 3px solid #FFFFFF;
-		border-bottom-width: 6px;
+		border-radius: 10px;
+		border: 2px solid #FFFFFF;
+		border-bottom-width: 4px;
 		border-bottom-color: #E0E0E0;
 		align-items: center;
 		justify-content: center;
-		margin: 5px;
+		margin: 4px;
 	}
 	
 	.preset-button:active {
 		background-color: #F5F5F5;
-		border-bottom-width: 3px;
+		border-bottom-width: 2px;
 	}
 	
 	.preset-text {
-		font-size: 18px;
+		font-size: 15px;
 		color: #FF9800;
 		font-weight: bold;
 	}
 	
 	.play-button-wrapper {
-		margin-top: 40px;
+		margin-top: 16px;
 		align-items: center;
 		justify-content: center;
 	}
 	
 	.play-button {
-		width: 120px;
-		height: 120px;
+		width: 88px;
+		height: 88px;
 		background-color: #FFFFFF;
-		border-radius: 60px;
-		border: 4px solid #FFFFFF;
-		border-bottom-width: 8px;
+		border-radius: 44px;
+		border: 3px solid #FFFFFF;
+		border-bottom-width: 6px;
 		border-bottom-color: #E0E0E0;
 		align-items: center;
 		justify-content: center;
@@ -369,30 +527,30 @@
 	
 	.play-button:active {
 		background-color: #F5F5F5;
-		border-bottom-width: 4px;
+		border-bottom-width: 3px;
 	}
 	
 	.play-icon {
-		font-size: 60px;
+		font-size: 44px;
 	}
 	
 	.beat-indicator {
-		margin-top: 30px;
+		margin-top: 14px;
 		align-items: center;
 		justify-content: center;
 	}
 	
 	.beat-circle {
-		width: 100px;
-		height: 100px;
-		border-radius: 50px;
+		width: 64px;
+		height: 64px;
+		border-radius: 32px;
 		background: rgba(255, 255, 255, 0.3);
-		border: 4px solid #FFFFFF;
+		border: 3px solid #FFFFFF;
 	}
 	
 	.beat-active {
 		background-color: #FFFFFF;
-		border-width: 6px;
+		border-width: 4px;
 	}
 </style>
 
